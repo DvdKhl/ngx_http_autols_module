@@ -20,6 +20,8 @@ int strbInit(strb_t *strb, ngx_pool_t *pool, size_t newBufferSize, size_t capaci
     strb->lastLink = strb->firstLink + bufs.num;
     strb->currentLink->buf->last_in_chain = 1;
 
+    strb->isInitialized = 1;
+
     return 1;
 }
 
@@ -190,6 +192,7 @@ int strbVFormat(strb_t *strb, const char *fmt, va_list args) {
     ngx_msec_t             ms;
     ngx_uint_t             width, sign, hex, max_width, frac_width, scale, n;
     ngx_str_t             *v;
+    ngx_chain_t           *chain;
     ngx_variable_value_t  *vv;
 
     while(*fmt) {
@@ -217,7 +220,7 @@ int strbVFormat(strb_t *strb, const char *fmt, va_list args) {
                 case '*': slen = va_arg(args, size_t); fmt++; continue;
                 case '.':
                     fmt++;
-                    while (*fmt >= '0' && *fmt <= '9') frac_width = frac_width * 10 + *fmt++ - '0';
+                    while(*fmt >= '0' && *fmt <= '9') frac_width = frac_width * 10 + *fmt++ - '0';
                     break;
 
                 default: break;
@@ -228,15 +231,24 @@ int strbVFormat(strb_t *strb, const char *fmt, va_list args) {
 
             switch (*fmt) {
             case 'V':
-                v = va_arg(args, ngx_str_t *);
+                v = va_arg(args, ngx_str_t*);
                 strbAppendNgxString(strb, v);
                 fmt++;
                 continue;
 
             case 'v':
-                vv = va_arg(args, ngx_variable_value_t *);
+                vv = va_arg(args, ngx_variable_value_t*);
                 if(!strbAppendMemory(strb, vv->data, vv->len)) return 0;
                 fmt++;
+                continue;
+
+            case 'C':
+                chain = va_arg(args, ngx_chain_t*);
+                while(chain != NULL) {
+                    if(chain->buf == NULL) return 0;
+                    strbAppendMemory(strb, chain->buf->pos, chain->buf->last - chain->buf->pos);
+                    chain = chain->next;
+                }
                 continue;
 
             case 's':

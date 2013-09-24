@@ -3,6 +3,7 @@
 #include <ngx_core.h>
 
 typedef struct {
+    int isInitialized;
     ngx_pool_t *pool;
     ngx_chain_t *firstLink, *currentLink, *lastLink;
 
