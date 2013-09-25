@@ -2,7 +2,7 @@
 
 int strbInit(strb_t *strb, ngx_pool_t *pool, size_t newBufferSize, size_t capacity) {
     ngx_bufs_t bufs;
-    
+
     if(capacity == 0) capacity = 1;
 
     bufs.num = capacity / newBufferSize + (capacity % newBufferSize != 0);
@@ -14,11 +14,11 @@ int strbInit(strb_t *strb, ngx_pool_t *pool, size_t newBufferSize, size_t capaci
     strb->size = strb->fragmentedCapacity = 0;
     strb->capacity = bufs.num * bufs.size;
 
-    strb->firstLink = strb->currentLink = ngx_create_chain_of_bufs(pool, &bufs);
-    if(strb->firstLink == NULL) return 0;
+    strb->startLink = strb->lastLink = ngx_create_chain_of_bufs(pool, &bufs);
+    if(strb->startLink == NULL) return 0;
 
-    strb->lastLink = strb->firstLink + bufs.num;
-    strb->currentLink->buf->last_in_chain = 1;
+    strb->endLink = strb->startLink + bufs.num;
+    strb->lastLink->buf->last_in_chain = 1;
 
     strb->isInitialized = 1;
 
@@ -33,10 +33,54 @@ int strbEnsureCapacity(strb_t *strb, size_t capacityEnsurance) {
     bufs.num = (ngx_int_t)(neededCapacity / strb->newBufferSize + (neededCapacity % strb->newBufferSize != 0));
     bufs.size = strb->newBufferSize;
 
-    strb->currentLink->buf->last_in_chain = 0;
-    strb->lastLink->next = ngx_create_chain_of_bufs(strb->pool, &bufs) + bufs.num;
-    if(strb->lastLink == NULL) return 0;
-    strb->lastLink->buf->last_in_chain = 1;
+    strb->lastLink->buf->last_in_chain = 0;
+    strb->endLink->next = ngx_create_chain_of_bufs(strb->pool, &bufs) + bufs.num;
+    if(strb->endLink == NULL) return 0;
+    strb->endLink->buf->last_in_chain = 1;
+
+    return 1;
+}
+
+int strbEnsureContinuousCapacity(strb_t *strb, size_t capacity) {
+    ngx_chain_t *chain;
+
+    chain->buf = ngx_create_temp_buf(strb->pool, capacity);
+
+    if(strbCurLast(strb) == strbCurEnd(strb)) strbUseNextChain(strb);
+    if(strb->lastLink != NULL && strbCurFree(strb) >= capacity) return 1;
+    
+    chain = ngx_alloc_chain_link(strb->pool);
+    if(chain == NULL) return 0;
+
+    chain->buf = ngx_create_temp_buf(strb->pool, capacity);
+    if(chain->buf == NULL) return 0;
+
+    if(strb->lastLink == NULL || strbCurStart(strb) == strbCurLast(strb)) {
+        chain->next = strb->lastLink;
+        strb->lastLink = chain;
+
+    } else {
+        ngx_chain_t *restChain = ngx_alloc_chain_link(strb->pool);
+        if(restChain == NULL) return 0;
+
+        restChain->buf = (ngx_buf_t*)ngx_calloc_buf(strb->pool);
+        if(restChain->buf == NULL) return 0;
+
+        restChain->buf->temporary = 1;
+        restChain->buf->pos = strbCurLast(strb);
+        restChain->buf->last = strbCurLast(strb);
+        restChain->buf->start = strbCurLast(strb);
+        restChain->buf->end = restChain->buf->start + strbCurFree(strb);
+
+        strbCurEnd(strb) = strbCurLast(strb);
+
+        restChain->next = strb->lastLink->next;
+        chain->next = restChain;
+        strb->lastLink->next = chain;
+    }
+
+    strb->capacity += capacity;
+    strb->lastLink = chain;
 
     return 1;
 }
@@ -45,7 +89,7 @@ int strbAppendMemory(strb_t *strb, u_char *src, size_t size) {
     size_t unusedSpace, copyLength;
     u_char *srcLimit = src + size;
 
-    if(!strbEnsureCapacity(strb, size)) return 0;
+    if(!strbEnsureFreeCapacity(strb, size)) return 0;
 
     while(src < srcLimit) {
         unusedSpace = strbCurFree(strb);
@@ -55,14 +99,14 @@ int strbAppendMemory(strb_t *strb, u_char *src, size_t size) {
         strb->size += copyLength;
         src += copyLength;
 
-        if(copyLength == 0) strb->currentLink++;
+        if(copyLength == 0) strbUseNextChain(strb);
     }
     return 1;
 }
 
 int strbSetSize(strb_t *strb, size_t size) {
     ngx_int_t sizeDiff = size - strb->size;
-    if(sizeDiff > 0) if(!strbEnsureCapacity(strb, sizeDiff)) return 0;
+    if(sizeDiff > 0) if(!strbEnsureCapacity(strb, size)) return 0;
 
     if(sizeDiff < 0) {
         sizeDiff *= -1;
@@ -74,7 +118,8 @@ int strbSetSize(strb_t *strb, size_t size) {
             strb->size -= toClear;
 
             if(sizeDiff != 0) {
-                strb->currentLink--;
+                return 0; //TODO: Fix strb->lastLink--;
+                strb->lastLink--;
                 strb->fragmentedCapacity -= strbCurFree(strb);
             }
         }
@@ -88,35 +133,51 @@ int strbSetSize(strb_t *strb, size_t size) {
             strb->size += toSet;
             sizeDiff -= toSet;
 
-            if(sizeDiff != 0) strb->currentLink++;
+            if(sizeDiff != 0) strbUseNextChain(strb);
         }
     }
     return 1;
 }
 
 int strbAppendSingle(strb_t *strb, u_char value) {
-    if(!strbEnsureCapacity(strb, 1)) return 0;
-    if(strbCurFree(strb) < 1) strb->currentLink++;
+    if(!strbEnsureFreeCapacity(strb, 1)) return 0;
+    if(strbCurFree(strb) < 1) strbUseNextChain(strb);
     *(strbCurLast(strb)++) = value;
     strb->size++;
     return 1;
 }
 
+int strbAppendPad(strb_t *strb, u_char c, size_t padLength) {
+    size_t toPad;
+
+    if(!strbEnsureFreeCapacity(strb, padLength)) return 0;
+    while(padLength != 0) {
+        toPad = ngx_min(padLength, (size_t)strbCurFree(strb));
+        ngx_memset(strbCurBuf(strb), c, toPad);
+        strbCurLast(strb) += toPad;
+
+        if(padLength != 0) strbUseNextChain(strb);
+    }
+    strb->size += padLength;
+
+    return 1;
+}
+
 int strbCompact(strb_t *strb) {
-    //ngx_chain_t *chain = strb->firstLink;
+    //ngx_chain_t *chain = strb->startLink;
 
     return 0;
 }
 
 int strbTrim(strb_t *strb/*, int doInfixTrim*/) {
     size_t reclaimedSpace = 0, reclaimedFragmentedSpace = 0;
-    ngx_chain_t **chain = &strb->firstLink, *toFree, *prevChain = NULL;
+    ngx_chain_t **chain = &strb->startLink, *toFree, *prevChain = NULL;
 
-    if(strb->firstLink == strb->lastLink) return 1;
+    if(strb->startLink == strb->endLink) return 1;
 
     while(*chain != NULL) {
-        if((*chain)->buf->last == (*chain)->buf->pos) {
-            reclaimedSpace += (*chain)->buf->end - (*chain)->buf->pos;
+        if((*chain)->buf->last == (*chain)->buf->start) {
+            reclaimedSpace += (*chain)->buf->end - (*chain)->buf->start;
 
             toFree = *chain;
             *chain = (*chain)->next;
@@ -196,7 +257,7 @@ int strbVFormat(strb_t *strb, const char *fmt, va_list args) {
     ngx_variable_value_t  *vv;
 
     while(*fmt) {
-        if(!strbEnsureCapacity(strb, 1)) return 0;
+        if(!strbEnsureFreeCapacity(strb, 1)) return 0;
 
         if(*fmt == '%') {
             zero = (u_char)((*++fmt == '0') ? '0' : ' ');
@@ -246,7 +307,7 @@ int strbVFormat(strb_t *strb, const char *fmt, va_list args) {
                 chain = va_arg(args, ngx_chain_t*);
                 while(chain != NULL) {
                     if(chain->buf == NULL) return 0;
-                    strbAppendMemory(strb, chain->buf->pos, chain->buf->last - chain->buf->pos);
+                    strbAppendMemory(strb, chain->buf->start, chain->buf->last - chain->buf->start);
                     chain = chain->next;
                 }
                 continue;
@@ -440,4 +501,141 @@ int strbFormat(strb_t *strb, const char *fmt, ...) {
     va_end(args);
 
     return rc;
+}
+
+//Copy paste from ngx_string.c (v1.4.1). Modified to more efficiently use strb_t
+int strbEscapeUri(strb_t *strb, u_char *src, size_t size, ngx_uint_t type) {
+    ngx_uint_t      n;
+    uint32_t       *escape;
+    static u_char   hex[] = "0123456789abcdef";
+
+    static uint32_t   uri[] = {
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0x80000029, /* 1000 0000 0000 0000  0000 0000 0010 1001 */
+        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+        0x80000000, /* 1000 0000 0000 0000  0000 0000 0000 0000 */
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+    };
+
+    static uint32_t   args[] = {
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0x88000869, /* 1000 1000 0000 0000  0000 1000 0110 1001 */
+        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+        0x80000000, /* 1000 0000 0000 0000  0000 0000 0000 0000 */
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+    };
+
+    static uint32_t   uri_component[] = {
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xfc009fff, /* 1111 1100 0000 0000  1001 1111 1111 1111 */
+        0x78000001, /* 0111 1000 0000 0000  0000 0000 0000 0001 */
+        0xb8000001, /* 1011 1000 0000 0000  0000 0000 0000 0001 */
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+    };
+
+    static uint32_t   html[] = {
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0x000000ad, /* 0000 0000 0000 0000  0000 0000 1010 1101 */
+        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+        0x80000000, /* 1000 0000 0000 0000  0000 0000 0000 0000 */
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+    };
+
+    static uint32_t   refresh[] = {
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0x00000085, /* 0000 0000 0000 0000  0000 0000 1000 0101 */
+        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+        0x80000000, /* 1000 0000 0000 0000  0000 0000 0000 0000 */
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+    };
+
+    static uint32_t   memcached[] = {
+        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+        0x00000021, /* 0000 0000 0000 0000  0000 0000 0010 0001 */
+        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+    };
+
+    static uint32_t  *map[] = { //mail_auth is the same as memcached
+        uri, args, uri_component, html, refresh, memcached, memcached
+    };
+
+    if(strbCurFree(strb) < size * 3) strbEnsureContinuousCapacity(strb, size * 3);
+
+    escape = map[type];
+    while(size) {
+        if (escape[*src >> 5] & (1 << (*src & 0x1f))) {
+            *(strbCurLast(strb)++) = '%';
+            *(strbCurLast(strb)++) = hex[*src >> 4];
+            *(strbCurLast(strb)++) = hex[*src & 0xf];
+            src++; n += 3;
+
+        } else {
+            *(strbCurLast(strb)++) = *src++;
+            n++;
+        }
+        size--;
+    }
+    strb->size += n;
+
+    return 1;
+}
+
+//Copy paste from ngx_string.c (v1.4.1). Modified to more efficiently use strb_t
+int strbEscapeHtml(strb_t *strb, u_char *src, size_t size) {
+    u_char      ch, *dst;
+    ngx_uint_t  len;
+    size_t i;
+
+    len = 0;
+    i = size;
+    while(i--) {
+        switch (*src++) {
+        case '<': len += sizeof("&lt;") - 1; break;
+        case '>': len += sizeof("&gt;") - 1; break;
+        case '&': len += sizeof("&amp;") - 1; break;
+        case '"': len += sizeof("&quot;") - 1; break;
+        default: len++; break;
+        }
+    }
+    src -= size;
+
+    if(!strbEnsureContinuousCapacity(strb, len)) return 0;
+
+    dst = strbCurLast(strb);
+    while(size) {
+        ch = *src++;
+
+        switch (ch) {
+        case '<': *dst++ = '&'; *dst++ = 'l'; *dst++ = 't'; *dst++ = ';'; break;
+        case '>': *dst++ = '&'; *dst++ = 'g'; *dst++ = 't'; *dst++ = ';'; break;
+        case '&': *dst++ = '&'; *dst++ = 'a'; *dst++ = 'm'; *dst++ = 'p'; *dst++ = ';'; break;
+        case '"': *dst++ = '&'; *dst++ = 'q'; *dst++ = 'u'; *dst++ = 'o'; *dst++ = 't'; *dst++ = ';'; break;
+        default: *dst++ = ch; break;
+        }
+
+        size--;
+    }
+    strbCurLast(strb) += len;
+
+    return (uintptr_t) dst;
 }
