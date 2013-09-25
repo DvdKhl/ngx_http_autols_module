@@ -19,7 +19,7 @@ static ngx_rc_t setRequestPath(connectionConf_T *conConf) {
 }
 
 static ngx_rc_t openDirectory(connectionConf_T *conConf, ngx_dir_t *dir) {
-    ngx_rc_t  rc;
+    ngx_rc_t   rc;
     ngx_err_t  err;
     ngx_uint_t level;
 
@@ -236,24 +236,24 @@ static ngx_rc_t createReplyBody(connectionConf_T *conConf, fileEntriesInfo_T *fi
 
         if(!strbAppendMemory(&strb, tpl + token->endAt, nextToken->startAt - token->endAt)) return NGX_ERROR;
 
-        if(compareTokenName(nextToken, &tplJsVariableStartStr)) {
+        if(ngx_str_compare(&nextToken->name, &tplJsVariableStartStr)) {
             doAppend = conConf->mainConf->createJsVariable;
             nextToken = appendSection(nextToken, (doAppend ? &strb : NULL), tpl, &tplJsVariableEndStr, NULL, fileEntriesInfo);
 
-        } else if(compareTokenName(nextToken, &tplJsSourceStartStr)) {
+        } else if(ngx_str_compare(&nextToken->name, &tplJsSourceStartStr)) {
             doAppend = conConf->mainConf->jsSourcePath.len != 0;
             nextToken = appendSection(nextToken, (doAppend ? &strb : NULL), tpl, &tplJsSourceEndStr, NULL, fileEntriesInfo);
 
-        } else if(compareTokenName(nextToken, &tplCssSourceStartStr)) {
+        } else if(ngx_str_compare(&nextToken->name, &tplCssSourceStartStr)) {
             doAppend = conConf->mainConf->cssSourcePath.len != 0;
             nextToken = appendSection(nextToken, (doAppend ? &strb : NULL), tpl, &tplCssSourceEndStr, NULL, fileEntriesInfo);
 
-        } else if(compareTokenName(nextToken, &tplBodyStartStr)) {
+        } else if(ngx_str_compare(&nextToken->name, &tplBodyStartStr)) {
             doAppend = conConf->mainConf->createBody;
             nextToken = appendSection(nextToken, (doAppend ? &strb : NULL), tpl, &tplBodyEndStr, NULL, fileEntriesInfo);
 
         } else if(nextToken->name.data != NULL) {
-            if(!appendGlobalTokenValue(nextToken, &strb, NULL)) return NGX_ERROR;
+            if(!appendTokenValue(nextToken, &strb, conConf, NULL)) return NGX_ERROR;
         }
 
         if(nextToken == NULL) return NGX_ERROR;
@@ -262,11 +262,11 @@ static ngx_rc_t createReplyBody(connectionConf_T *conConf, fileEntriesInfo_T *fi
     logHttpDebugMsg0(conConf, "autols: Reply body generated");
 
     if(conConf->request == conConf->request->main) {
-        strb.currentLink->buf->last_buf = 1;
+        strb.lastLink->buf->last_buf = 1;
         //TODO?: String builder cleanup
     }
 
-    *out = *strb.firstLink;
+    *out = *strb.startLink;
     return NGX_OK;
 }
 
@@ -417,12 +417,6 @@ static int ngx_libc_cdecl fileEntryComparer(const void *one, const void *two) {
     return (int) ngx_strcmp(first->name.data, second->name.data);
 }
 
-
-static int compareTokenName(templateToken_t *token, ngx_str_t *name) {
-    return name->len == token->name.len && !ngx_memcmp(name->data, token->name.data, token->name.len);
-}
-
-
 static int parseTemplate(connectionConf_T *conConf) {
     u_char *tpl, *tplLast, *tokenNameStart, *attributeNameStart, *attributeValueStart;
     size_t tokenNameLength, attributeNameLength, attributeValueLength;
@@ -510,42 +504,84 @@ static int parseTemplate(connectionConf_T *conConf) {
     return 1;
 }
 
-static int appendGlobalTokenValue(templateToken_t *token, strb_t *strb, void *globalInfo) {
-    if(!strb) return 1;
 
-    logHttpDebugMsg1(cc, "autols: Appending Global TokenValue \"%V\"", &token->name);
-    return 1;
-}
+static int appendTokenValue(templateToken_t *token, strb_t *strb, connectionConf_T *conConf, fileEntry_t *fileEntry) {
+    static strb_t strbA, strbB;
+    static ngx_pool_t *pool;
 
-static int appendEntryTokenValue(templateToken_t *token, strb_t *strb, fileEntry_t *fileEntry) {
-    if(!strb) return 1;
+    templateTokenAttribute_t *attribute, *attributeLimit;
+    strb_t *curStrb, *prevStrb, *tmpStrb;
 
-    logHttpDebugMsg1(cc, "autols: Appending Entry TokenValue \"%V\"", &token->name);
+    //Cannot use conConf->pool if the instance is used for more than one connection
+    if(pool == NULL) pool = ngx_create_pool(512, conConf->log);
+    if(!strbA.isInitialized) strbInit(&strbA, pool, 256, 256); 
+    if(!strbB.isInitialized) strbInit(&strbB, pool, 256, 256); 
 
-    if(compareTokenName(token, &tplEntryIsDirectoryStr)) {
-        if(!strbAppendSingle(strb, fileEntry->isDirectory ? '1' : '0')) return 0;
+    curStrb = &strbA; prevStrb = &strbB;
+    strbSetSize(curStrb, 0);
+    
+    logHttpDebugMsg1(conConf->log, "autols: Appending TokenValue of \"%V\"", &token->name);
 
-    } else if(compareTokenName(token, &tplEntryModifiedOnStr)) {
-        ngx_tm_t tm = fileEntry->modifiedOn;
-        if(!strbFormat(strb, "%02d-%02d-%d %02d:%02d",
-            tm.ngx_tm_mday, tm.ngx_tm_mon, tm.ngx_tm_year,
-            tm.ngx_tm_hour, tm.ngx_tm_min)) return 0;
+    if(fileEntry != NULL) {
+        if(ngx_str_compare(&token->name, &tplEntryIsDirectoryStr)) {
+            if(!strbAppendSingle(curStrb, fileEntry->isDirectory ? '1' : '0')) return 0;
 
-    } else if(compareTokenName(token, &tplEntrySizeStr)) {
-        if(!strbFormat(strb, "%d", fileEntry->size)) return 0;
+        } else if(ngx_str_compare(&token->name, &tplEntryModifiedOnStr)) {
+            ngx_tm_t tm = fileEntry->modifiedOn;
+            if(!strbFormat(curStrb, "%02d-%02d-%d %02d:%02d",
+                tm.ngx_tm_mday, tm.ngx_tm_mon, tm.ngx_tm_year,
+                tm.ngx_tm_hour, tm.ngx_tm_min)) return 0;
 
-    } else if(compareTokenName(token, &tplEntryNameStr)) {
-        if(!strbAppendNgxString(strb, &fileEntry->name)) return 0;
+        } else if(ngx_str_compare(&token->name, &tplEntrySizeStr)) {
+            if(!strbFormat(curStrb, "%d", fileEntry->size)) return 0;
+
+        } else if(ngx_str_compare(&token->name, &tplEntryNameStr)) {
+            if(!strbAppendNgxString(curStrb, &fileEntry->name)) return 0;
+        }
+    }
+
+    if(ngx_str_compare(&token->name, &tplReplyCharSetStr)) {
+        if(!strbAppendNgxString(curStrb, &conConf->mainConf->charSet)) return 0;
+
+    } else if(ngx_str_compare(&token->name, &tplRequestUriStr)) {
+        if(!strbAppendNgxString(curStrb, &conConf->requestPath)) return 0;
+    }
+
+    attribute = (templateTokenAttribute_t*)token->attributes.elts;
+    attributeLimit = attribute + token->attributes.nelts;
+    while(attribute != attributeLimit) {
+        tmpStrb = curStrb; curStrb = prevStrb; prevStrb = tmpStrb; //curStrb<->nextStrb swap
+        strbSetSize(curStrb, 0);
+
+        if(ngx_str_compare(&attribute->name, &tplAttStartAtStr)) {
+            if(fileEntry == NULL) return 0;
+            strbAppendPad(curStrb, ' ', strb->size - conConf->tplEntryStartPos);
+            strbAppendStrb(curStrb, prevStrb);
+
+        } else if(ngx_str_compare(&attribute->name, &tplAttEscapeStr)) {
+            if(ngx_str_compare(&attribute->name, &tplAttUriComponentStr)) {
+                strbTransformStrb(curStrb, prevStrb, strbTransEscapeUri, NGX_ESCAPE_URI_COMPONENT);
+            } else if(ngx_str_compare(&attribute->name, &tplAttUriStr)) {
+                strbTransformStrb(curStrb, prevStrb, strbTransEscapeUri, NGX_ESCAPE_URI);
+            } else if(ngx_str_compare(&attribute->name, &tplAttHttpStr)) {
+                strbTransformStrb(curStrb, prevStrb, strbTransEscapeHtml);
+            } else return 0;
+
+        } else { //Undo swap since we didn't change anything
+            tmpStrb = curStrb; curStrb = prevStrb; prevStrb = tmpStrb; //curStrb<->nextStrb swap
+        }
+
+        attribute++;
     }
 
     return 1;
 }
 
-static templateToken_t* appendSection(templateToken_t *token, strb_t *strb, u_char *tpl, ngx_str_t *endTokenName, void *globalInfo, fileEntriesInfo_T *fileEntriesInfo) {
+static templateToken_t* appendSection(templateToken_t *token, strb_t *strb, u_char *tpl, ngx_str_t *endTokenName, connectionConf_T *conConf, fileEntriesInfo_T *fileEntriesInfo) {
     templateToken_t *nextToken, *entryStartToken;
     fileEntry_t *fileEntry, *lastFileEntry;
 
-    logHttpDebugMsg0(cc, "autols: Section Start");
+    logHttpDebugMsg0(conConf->log, "autols: Section Start");
 
     //Single non-entries section or beginning of entries section
     nextToken = token;
@@ -555,14 +591,14 @@ static templateToken_t* appendSection(templateToken_t *token, strb_t *strb, u_ch
         if(strb) if(!strbAppendMemory(strb, tpl + token->endAt, nextToken->startAt - token->endAt)) return NULL;
 
         if(nextToken->name.data == NULL ||
-            compareTokenName(nextToken, &tplEntryStartStr) ||
-            compareTokenName(nextToken, endTokenName)) break;
+            ngx_str_compare(&nextToken->name, &tplEntryStartStr) ||
+            ngx_str_compare(&nextToken->name, endTokenName)) break;
 
-        if(!appendGlobalTokenValue(nextToken, strb, globalInfo)) return NULL;
+        if(!appendTokenValue(nextToken, strb, conConf, NULL)) return NULL;
     }
 
     if(nextToken->name.data == NULL) return NULL;
-    if(compareTokenName(nextToken, endTokenName)) {
+    if(ngx_str_compare(&nextToken->name, endTokenName)) {
         logHttpDebugMsg0(cc, "autols: Section End");
         return nextToken;
     }
@@ -579,10 +615,11 @@ static templateToken_t* appendSection(templateToken_t *token, strb_t *strb, u_ch
 
         for(;;) {
             token = nextToken++;
-             if(strb) if(!strbAppendMemory(strb, tpl + token->endAt, nextToken->startAt - token->endAt)) return NULL;
+            conConf->tplEntryStartPos = strb->size;
+            if(strb) if(!strbAppendMemory(strb, tpl + token->endAt, nextToken->startAt - token->endAt)) return NULL;
 
-            if(nextToken->name.data == NULL || compareTokenName(nextToken, &tplEntryEndStr)) break;
-            if(!appendEntryTokenValue(nextToken, strb, fileEntry)) return NULL;
+            if(nextToken->name.data == NULL || ngx_str_compare(&nextToken->name, &tplEntryEndStr)) break;
+            if(!appendTokenValue(nextToken, strb, conConf, fileEntry)) return NULL;
         }
         if(nextToken->name.data == NULL) return NULL;
         fileEntry++;
@@ -595,11 +632,11 @@ static templateToken_t* appendSection(templateToken_t *token, strb_t *strb, u_ch
         token = nextToken++;
         if(strb) if(!strbAppendMemory(strb, tpl + token->endAt, nextToken->startAt - token->endAt)) return NULL;
 
-        if(nextToken->name.data == NULL || compareTokenName(nextToken, endTokenName)) break;
-        if(!appendGlobalTokenValue(nextToken, strb, globalInfo)) return NULL;
+        if(nextToken->name.data == NULL || ngx_str_compare(&nextToken->name, endTokenName)) break;
+        if(!appendTokenValue(nextToken, strb, conConf, NULL)) return NULL;
     }
 
-    logHttpDebugMsg0(cc, "autols: Section End");
+    logHttpDebugMsg0(conConf->log, "autols: Section End");
 
     return nextToken;
 }

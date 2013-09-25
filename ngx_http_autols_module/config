@@ -1,0 +1,8 @@
+# vim:ft=sh:
+ngx_addon_name=ngx_http_autols_module
+
+# XXX: Insert autols module *after* index module!
+#
+HTTP_MODULES=`echo "${HTTP_MODULES}" | sed -e \
+	's/ngx_http_autoindex_module/ngx_http_autols_module ngx_http_autoindex_module/'`
+NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/strb.c $ngx_addon_dir/ngx_http_autols_module.c"

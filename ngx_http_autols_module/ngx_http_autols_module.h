@@ -21,8 +21,8 @@
 #define logHttpDebugMsg7(conConf, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)       ngx_log_debug7(NGX_LOG_DEBUG_HTTP, (conConf)->log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 #define logHttpDebugMsg8(conConf, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) ngx_log_debug8(NGX_LOG_DEBUG_HTTP, (conConf)->log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
 
-//static ngx_str_t tplReplyCharSetStr = ngx_string("ReplyCharSet");
-//static ngx_str_t tplRequestUriStr = ngx_string("RequestUri");
+static ngx_str_t tplReplyCharSetStr = ngx_string("ReplyCharSet");
+static ngx_str_t tplRequestUriStr = ngx_string("RequestUri");
 
 static ngx_str_t tplJsVariableStartStr = ngx_string("JSVariableStart");
 static ngx_str_t tplJsVariableEndStr = ngx_string("JSVariableEnd");
@@ -42,6 +42,13 @@ static ngx_str_t tplEntryModifiedOnStr = ngx_string("EntryModifiedOn");
 static ngx_str_t tplEntrySizeStr = ngx_string("EntrySize");
 static ngx_str_t tplEntryNameStr = ngx_string("EntryName");
 static ngx_str_t tplEntryEndStr = ngx_string("EntryEnd");
+
+
+static ngx_str_t tplAttStartAtStr = ngx_string("StartAt");
+static ngx_str_t tplAttEscapeStr = ngx_string("Escape");
+static ngx_str_t tplAttUriComponentStr = ngx_string("UriComponent");
+static ngx_str_t tplAttHttpStr = ngx_string("Http");
+static ngx_str_t tplAttUriStr = ngx_string("Uri");
 
 static u_char defaultPageTemplate[] =
     "<!DOCTYPE html>" CRLF
@@ -72,6 +79,7 @@ static u_char defaultPageTemplate[] =
 static int mergeCallCount = 0, handlerInvokeCount = 0;
 
 typedef ngx_int_t ngx_rc_t;
+#define ngx_str_compare(a,b) ((a)->len == (b)->len && !ngx_memcmp((a)->data, (b)->data, (a)->len))
 
 static ngx_rc_t ngx_http_autols_init(ngx_conf_t *cf);
 static void *ngx_http_autols_create_loc_conf(ngx_conf_t *cf);
@@ -100,6 +108,8 @@ typedef struct {
 
     ngx_str_t requestPath;
     size_t requestPathCapacity;
+
+    size_t tplEntryStartPos;
 } connectionConf_T;
 
 typedef struct {
@@ -122,10 +132,9 @@ typedef struct {
 
 static int ngx_libc_cdecl fileEntryComparer(const void *one, const void *two);
 static ngx_rc_t logDirError(connectionConf_T *conConf, ngx_dir_t *dir, ngx_str_t *name);
-static int compareTokenName(templateToken_t *token, ngx_str_t *name);
 
-static int appendGlobalTokenValue(templateToken_t *token, strb_t *strb, void *globalInfo);
-static templateToken_t* appendSection(templateToken_t *token, strb_t *strb, u_char *tpl, ngx_str_t *endTokenName, void *globalInfo, fileEntriesInfo_T *fileEntriesInfo);
+static templateToken_t* appendSection(templateToken_t *token, strb_t *strb, u_char *tpl, ngx_str_t *endTokenName, connectionConf_T *conConf, fileEntriesInfo_T *fileEntriesInfo);
+static int appendTokenValue(templateToken_t *token, strb_t *strb, connectionConf_T *conConf, fileEntry_t *fileEntry);
 static int parseTemplate(connectionConf_T *conConf);
 
 static ngx_command_t ngx_http_autols_commands[] = {
