@@ -33,6 +33,7 @@ int strbInit(strb_t *strb, ngx_pool_t *pool, size_t newBufferSize, size_t capaci
 int strbEnsureCapacity(strb_t *strb, size_t capacityEnsurance);
 int strbEnsureContinuousCapacity(strb_t *strb, size_t capacity);
 int strbAppendMemory(strb_t *strb, u_char *src, size_t size);
+int strbAppendStrb(strb_t *dst, strb_t *src);
 int strbAppendSingle(strb_t *strb, u_char value);
 int strbAppendPad(strb_t *strb, u_char c, size_t padLength);
 int strbVFormat(strb_t *strb, const char *fmt, va_list args);
@@ -41,3 +42,11 @@ int strbSetSize(strb_t *strb, size_t size);
 int strbTrim(strb_t *strb/*, int doInfixTrim*/);
 int strbEscapeUri(strb_t *strb, u_char *src, size_t size, ngx_uint_t type);
 int strbEscapeHtml(strb_t *strb, u_char *src, size_t size);
+int strbToCString(strb_t *strb, u_char **data);
+
+typedef int (*strbTransform_fptr)(strb_t *strb, u_char *src, size_t size, va_list args);
+int strbTransformStrb(strb_t *dst, strb_t *src, strbTransform_fptr strbTransformMethod, ...);
+
+int strbTransFormat(strb_t *strb, u_char *src, size_t size, va_list args);
+int strbTransEscapeHtml(strb_t *strb, u_char *src, size_t size, va_list args);
+int strbTransEscapeUri(strb_t *strb, u_char *src, size_t size, va_list args);
