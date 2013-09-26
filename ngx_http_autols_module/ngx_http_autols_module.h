@@ -44,6 +44,7 @@ static ngx_str_t tplEntryNameStr = ngx_string("EntryName");
 static ngx_str_t tplEntryEndStr = ngx_string("EntryEnd");
 
 
+static ngx_str_t tplAttNoCountStr = ngx_string("NoCount");
 static ngx_str_t tplAttStartAtStr = ngx_string("StartAt");
 static ngx_str_t tplAttEscapeStr = ngx_string("Escape");
 static ngx_str_t tplAttUriComponentStr = ngx_string("UriComponent");
@@ -72,7 +73,7 @@ static u_char defaultPageTemplate[] =
     "  <body bgcolor=\"white\">&{BodyStart}" CRLF
     "    <h1>Index of &{RequestUri}</h1>" CRLF
     "    <hr>" CRLF
-    "    <pre>&{EntryStart}<a href=\"&{EntryName?Escape=UriComponent}\">&{EntryName}</a>&{EntryModifiedOn?StartAt=52}&{EntrySize?StartAt=70}&{EntryEnd}</pre>&{BodyEnd}" CRLF
+    "    <pre>&{EntryStart}<a href=\"&{EntryName?Escape=UriComponent&NoCount}\">&{EntryName}</a>&{EntryModifiedOn?StartAt=82}&{EntrySize?StartAt=98}&{EntryEnd}</pre>&{BodyEnd}" CRLF
     "  </body>" CRLF
     "</html>";
 
@@ -109,7 +110,7 @@ typedef struct {
     ngx_str_t requestPath;
     size_t requestPathCapacity;
 
-    size_t tplEntryStartPos;
+    int32_t tplEntryStartPos;
 } connectionConf_T;
 
 typedef struct {

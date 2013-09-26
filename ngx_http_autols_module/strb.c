@@ -1,17 +1,17 @@
 #include "strb.h"
 
-int strbInit(strb_t *strb, ngx_pool_t *pool, size_t newBufferSize, size_t capacity) {
+int strbInit(strb_t *strb, ngx_pool_t *pool, int32_t newBufferSize, int32_t minCapacity) {
     ngx_bufs_t bufs;
 
-    if(capacity == 0) capacity = 1;
+    if(minCapacity < 0) return 0;
+    if(minCapacity == 0) minCapacity = 1;
 
-    bufs.num = capacity / newBufferSize + (capacity % newBufferSize != 0);
+    bufs.num = minCapacity / newBufferSize + (minCapacity % newBufferSize != 0);
     bufs.size = newBufferSize;
 
     strb->pool = pool;
     strb->newBufferSize = newBufferSize;
 
-    strb->size = strb->fragmentedCapacity = 0;
     strb->capacity = bufs.num * bufs.size;
 
     strb->startLink = strb->lastLink = ngx_create_chain_of_bufs(pool, &bufs);
@@ -25,13 +25,14 @@ int strbInit(strb_t *strb, ngx_pool_t *pool, size_t newBufferSize, size_t capaci
     return 1;
 }
 
-int strbEnsureCapacity(strb_t *strb, size_t capacityEnsurance) {
-    off_t neededCapacity = capacityEnsurance - strbFree(strb);
+int strbEnsureCapacity(strb_t *strb, int32_t capacity) {
+    int32_t neededCapacity = capacity - strbFree(strb);
     ngx_bufs_t bufs;
 
     if(neededCapacity < 1) return 1;
-    bufs.num = (ngx_int_t)(neededCapacity / strb->newBufferSize + (neededCapacity % strb->newBufferSize != 0));
+
     bufs.size = strb->newBufferSize;
+    bufs.num = (ngx_int_t)(neededCapacity / strb->newBufferSize + ((neededCapacity % strb->newBufferSize) != 0));
 
     strb->lastLink->buf->last_in_chain = 0;
     strb->endLink->next = ngx_create_chain_of_bufs(strb->pool, &bufs) + bufs.num;
@@ -41,9 +42,10 @@ int strbEnsureCapacity(strb_t *strb, size_t capacityEnsurance) {
     return 1;
 }
 
-int strbEnsureContinuousCapacity(strb_t *strb, size_t capacity) {
+int strbEnsureContinuousCapacity(strb_t *strb, int32_t capacity) {
     ngx_chain_t *chain;
 
+    if(capacity < 1) return 1;
     if(strbCurLast(strb) == strbCurEnd(strb)) strbUseNextChain(strb);
     if(strb->lastLink != NULL && strbCurFree(strb) >= capacity) return 1;
     
@@ -83,45 +85,56 @@ int strbEnsureContinuousCapacity(strb_t *strb, size_t capacity) {
     return 1;
 }
 
-int strbSetSize(strb_t *strb, size_t size) {
+int strbSetSize(strb_t *strb, int32_t size) {
+    if(size < 0) return 0;
     if(!strbEnsureCapacity(strb, size)) return 0;
 
     if(strb->size < size) {
-        size -= strb->size;
+        size = size - strb->size;
         while(size) {
-            size_t toClear = ngx_min(strbCurSize(strb), size);
-            strbCurBuf(strb)->last -= toClear;
-
-            size -= toClear;
-            strb->size -= toClear;
-
-            if(size != 0) {
-                return 0; //TODO: Fix strb->lastLink--;
-                strb->lastLink--;
-                strb->fragmentedCapacity -= strbCurFree(strb);
-            }
-        }
-
-    } else {
-        size = strb->size - size;
-        while(size) {
-            size_t toSet = ngx_min(strbCurFree(strb), size);
+            int32_t toSet = ngx_min(strbCurFree(strb), size);
             ngx_memzero(strbCurLast(strb), size);
-            strbCurBuf(strb)->last += toSet;
+            strbCurLast(strb) += toSet;
 
             strb->size += toSet;
             size -= toSet;
 
             if(size != 0) strbUseNextChain(strb);
         }
+
+    } else {
+        if(strbCurSize(strb) >= strb->size - size) { //Check if current chain is the one we're looking for
+            strbCurLast(strb) -= strb->size - size;
+
+        } else { //Seek chain from startlink
+            int32_t toSeek = size;
+            ngx_chain_t *curChain = strb->startLink;
+
+            while(curChain != NULL && toSeek >= curChain->buf->last - curChain->buf->start) {
+                toSeek -= curChain->buf->last - curChain->buf->start;
+                curChain = curChain->next;
+            }
+            if(curChain == NULL) return 0;
+
+            strb->lastLink->buf->last_in_chain = 0;
+            strb->lastLink = curChain;
+
+            curChain->buf->last_in_chain = 1;
+            curChain->buf->last = curChain->buf->start + toSeek;
+
+            curChain = curChain->next;
+            while(curChain != NULL) curChain->buf->last = curChain->buf->start;
+        }
+        strb->size = size;
     }
     return 1;
 }
 
-int strbAppendMemory(strb_t *strb, u_char *src, size_t size) {
-    size_t unusedSpace, copyLength;
+int strbAppendMemory(strb_t *strb, u_char *src, int32_t size) {
+    int32_t unusedSpace, copyLength;
     u_char *srcLimit = src + size;
 
+    if(size < 0) return 0;
     if(!strbEnsureFreeCapacity(strb, size)) return 0;
 
     while(src < srcLimit) {
@@ -145,18 +158,18 @@ int strbAppendSingle(strb_t *strb, u_char value) {
     return 1;
 }
 
-int strbAppendPad(strb_t *strb, u_char c, size_t padLength) {
-    size_t toPad;
-
+int strbAppendPad(strb_t *strb, u_char c, int32_t padLength) {
     if(!strbEnsureFreeCapacity(strb, padLength)) return 0;
+
+    strb->size += padLength;
     while(padLength != 0) {
-        toPad = ngx_min(padLength, (size_t)strbCurFree(strb));
-        ngx_memset(strbCurBuf(strb), c, toPad);
+        int32_t toPad = ngx_min(padLength, strbCurFree(strb));
+        ngx_memset(strbCurLast(strb), c, toPad);
         strbCurLast(strb) += toPad;
+        padLength -= toPad;
 
         if(padLength != 0) strbUseNextChain(strb);
     }
-    strb->size += padLength;
 
     return 1;
 }
@@ -178,7 +191,7 @@ int strbCompact(strb_t *strb) {
 }
 
 int strbTrim(strb_t *strb/*, int doInfixTrim*/) {
-    size_t reclaimedSpace = 0, reclaimedFragmentedSpace = 0;
+    int32_t reclaimedSpace = 0;
     ngx_chain_t **chain = &strb->startLink, *toFree, *prevChain = NULL;
 
     if(strb->startLink == strb->endLink) return 1;
@@ -192,9 +205,6 @@ int strbTrim(strb_t *strb/*, int doInfixTrim*/) {
 
             toFree->buf->last_in_chain = 0;
             ngx_free_chain(strb->pool, toFree);
-
-        } else {
-            reclaimedFragmentedSpace = reclaimedSpace;
         }
 
         prevChain = *chain;
@@ -203,16 +213,15 @@ int strbTrim(strb_t *strb/*, int doInfixTrim*/) {
     prevChain->buf->last_in_chain = 1;
 
     strb->capacity -= reclaimedSpace;
-    strb->fragmentedCapacity -= reclaimedFragmentedSpace;
 
     return 1;
 }
 
-int strbInsertMemory(strb_t *strb, size_t dstPos, u_char *src, size_t size) {
+int strbInsertMemory(strb_t *strb, size_t dstPos, u_char *src, int32_t size) {
     return 0;
 }
 
-int strbFragmentingInsertMemory(strb_t *strb, size_t dstPos, u_char *src, size_t size) {
+int strbFragmentingInsertMemory(strb_t *strb, int32_t dstPos, u_char *src, int32_t size) {
     return 0;
 }
 
@@ -513,7 +522,7 @@ int strbFormat(strb_t *strb, const char *fmt, ...) {
 }
 
 //Copy paste from ngx_string.c (v1.4.1). Modified to more efficiently use strb_t
-int strbEscapeUri(strb_t *strb, u_char *src, size_t size, ngx_uint_t type) {
+int strbEscapeUri(strb_t *strb, u_char *src, int32_t size, uint32_t type) {
     ngx_uint_t      n;
     uint32_t       *escape;
     static u_char   hex[] = "0123456789abcdef";
@@ -588,8 +597,9 @@ int strbEscapeUri(strb_t *strb, u_char *src, size_t size, ngx_uint_t type) {
         uri, args, uri_component, html, refresh, memcached, memcached
     };
 
-    if(strbCurFree(strb) < size * 3) strbEnsureContinuousCapacity(strb, size * 3);
+    if(strbCurFree(strb) < size * 3 && !strbEnsureContinuousCapacity(strb, size * 3)) return 0;
 
+    n = 0;
     escape = map[type];
     while(size) {
         if (escape[*src >> 5] & (1 << (*src & 0x1f))) {
@@ -610,7 +620,7 @@ int strbEscapeUri(strb_t *strb, u_char *src, size_t size, ngx_uint_t type) {
 }
 
 //Copy paste from ngx_string.c (v1.4.1). Modified to more efficiently use strb_t
-int strbEscapeHtml(strb_t *strb, u_char *src, size_t size) {
+int strbEscapeHtml(strb_t *strb, u_char *src, int32_t size) {
     u_char      ch, *dst;
     ngx_uint_t  len;
     size_t i;
@@ -646,7 +656,7 @@ int strbEscapeHtml(strb_t *strb, u_char *src, size_t size) {
     }
     strbCurLast(strb) += len;
 
-    return (uintptr_t) dst;
+    return 1;
 }
 
 
@@ -686,12 +696,12 @@ int strbTransformStrb(strb_t *dst, strb_t *src, strbTransform_fptr strbTransform
     return returnCode;
 }
 
-int strbTransFormat(strb_t *strb, u_char *src, size_t size, va_list args) {
+int strbTransFormat(strb_t *strb, u_char *src, int32_t size, va_list args) {
     return strbFormat(strb, va_arg(args, const char*), src);
 }
-int strbTransEscapeHtml(strb_t *strb, u_char *src, size_t size, va_list args) {
+int strbTransEscapeHtml(strb_t *strb, u_char *src, int32_t size, va_list args) {
     return strbEscapeHtml(strb, src, size);
 }
-int strbTransEscapeUri(strb_t *strb, u_char *src, size_t size, va_list args) {
-    return strbEscapeUri(strb, src, size, va_arg(args, ngx_uint_t));
+int strbTransEscapeUri(strb_t *strb, u_char *src, int32_t size, va_list args) {
+    return strbEscapeUri(strb, src, size, va_arg(args, uint32_t));
 }
