@@ -119,8 +119,6 @@ static ngx_rc_t getFiles(connectionConf_T *conConf, ngx_dir_t *dir, fileEntriesI
             err = ngx_errno;
 
             if(err != NGX_ENOMOREFILES) {
-                //logDirError(conConf->request, &conConf->dir, &path);
-
                 ngx_log_error(
                     NGX_LOG_CRIT, conConf->log, err,
                     ngx_read_dir_n " \"%V\" failed", reqPath->data);
