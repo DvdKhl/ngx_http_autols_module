@@ -1,6 +1,5 @@
 #include "ngx_http_autols_module.h"
 
-
 static void appendConfig(strb_t *strb, connectionConf_T *config) {
     strbFormat(strb, CRLF "mainConf->enable = %d" CRLF, config->mainConf->enable);
     strbFormat(strb, "mainConf->createJsVariable = %d" CRLF, config->mainConf->createJsVariable);
