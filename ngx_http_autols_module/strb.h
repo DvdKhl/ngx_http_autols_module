@@ -6,6 +6,9 @@
 
 ngx_log_t *connLog;
 
+#define DEBUG_STRINGBUILDER 0
+
+#if DEBUG_STRINGBUILDER
 #define logDebugMsg0(log, fmt)                                                 ngx_log_debug0(NGX_LOG_DEBUG_HTTP, log, 0, fmt)
 #define logDebugMsg1(log, fmt, arg1)                                           ngx_log_debug1(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1)
 #define logDebugMsg2(log, fmt, arg1, arg2)                                     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2)
@@ -15,6 +18,17 @@ ngx_log_t *connLog;
 #define logDebugMsg6(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6)             ngx_log_debug6(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6)
 #define logDebugMsg7(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)       ngx_log_debug7(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 #define logDebugMsg8(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) ngx_log_debug8(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
+#else
+#define logDebugMsg0(log, fmt)                                                 
+#define logDebugMsg1(log, fmt, arg1)                                           
+#define logDebugMsg2(log, fmt, arg1, arg2)                                     
+#define logDebugMsg3(log, fmt, arg1, arg2, arg3)                               
+#define logDebugMsg4(log, fmt, arg1, arg2, arg3, arg4)                         
+#define logDebugMsg5(log, fmt, arg1, arg2, arg3, arg4, arg5)                   
+#define logDebugMsg6(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6)             
+#define logDebugMsg7(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)       
+#define logDebugMsg8(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) 
+#endif
 
 
 
@@ -37,9 +51,9 @@ typedef struct {
 #define strbCurSize(strb)  ((int32_t)(strbCurLast(strb) - strbCurStart(strb)))
 
 #define strbAppendNgxString(strb, str) strbAppendMemory(strb, (str)->data, (str)->len)
-#define strbAppendCString(strb, str) strbAppendMemory(strb, str, strlen((char*)(str))) //TODO: Rewrite without strlen
+#define strbAppendCString(strb, str) strbAppendMemory(strb, (u_char*)str, strlen((char*)str)) //TODO: Rewrite without strlen
 
-#define strbUseNextChain(strb) (strb->lastLink = strb->lastLink->next)
+#define strbUseNextChain(strb) { strb->lastLink->buf->last_in_chain = 0; strb->lastLink = strb->lastLink->next; strb->lastLink->buf->last_in_chain = 1; }
 
 #define strbDecreaseSizeBy(strb, decr) strbSetSize(strb, (strb)->size - (decr))
 
@@ -51,7 +65,7 @@ int strbEnsureContinuousCapacity(strb_t *strb, int32_t capacity);
 int strbAppendMemory(strb_t *strb, u_char *src, int32_t size);
 int strbAppendStrb(strb_t *dst, strb_t *src);
 int strbAppendSingle(strb_t *strb, u_char value);
-int strbAppendPad(strb_t *strb, u_char c, int32_t padLength);
+int strbAppendRepeat(strb_t *strb, u_char c, int32_t length);
 int strbVFormat(strb_t *strb, const char *fmt, va_list args);
 int strbFormat(strb_t *strb, const char *fmt, ...);
 int strbSetSize(strb_t *strb, int32_t size);

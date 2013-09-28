@@ -3,6 +3,7 @@
 int strbInit(strb_t *strb, ngx_pool_t *pool, int32_t newBufferSize, int32_t minCapacity) {
     ngx_bufs_t bufs;
 
+    logDebugMsg2(connLog, ">strbInit(newBufferSize=%D, minCapacity=%D)", newBufferSize, minCapacity);
     if(minCapacity < 0) return 0;
     if(minCapacity == 0) minCapacity = 1;
 
@@ -16,44 +17,59 @@ int strbInit(strb_t *strb, ngx_pool_t *pool, int32_t newBufferSize, int32_t minC
 
     strb->startLink = strb->lastLink = ngx_create_chain_of_bufs(pool, &bufs);
     if(strb->startLink == NULL) return 0;
+    logDebugMsg2(connLog, "bufs(num=%D, size=%D)", bufs.num, bufs.size);
 
-    strb->endLink = strb->startLink + bufs.num;
+    strb->endLink = strb->startLink;
+    while(strb->endLink->next != NULL) {
+        logDebugMsg2(connLog, "bufs(strb->endLink=%D, strb->endLink->next=%D)", strb->endLink, strb->endLink->next);
+        strb->endLink = strb->endLink->next;
+    }
+
     strb->lastLink->buf->last_in_chain = 1;
-
     strb->isInitialized = 1;
 
+    logDebugMsg7(connLog, "<strbInit(newBufferSize=%D, minCapacity=%D) strb(size=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d)", newBufferSize, minCapacity, strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
     return 1;
 }
 
 int strbEnsureCapacity(strb_t *strb, int32_t capacity) {
-    int32_t neededCapacity = capacity - strbFree(strb);
+    int32_t neededCapacity = capacity - strb->capacity;
     ngx_bufs_t bufs;
 
+    logDebugMsg8(connLog, ">strbEnsureCapacity(capacity=%D) strb(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d, lastLink->next=%d)", capacity, strb->size, strbCurSize(strb), strb->capacity, strb->startLink, strb->lastLink, strb->endLink, strb->lastLink->next);
     if(neededCapacity < 1) return 1;
 
     bufs.size = strb->newBufferSize;
     bufs.num = (ngx_int_t)(neededCapacity / strb->newBufferSize + ((neededCapacity % strb->newBufferSize) != 0));
 
-    strb->lastLink->buf->last_in_chain = 0;
-    strb->endLink->next = ngx_create_chain_of_bufs(strb->pool, &bufs) + bufs.num;
-    if(strb->endLink == NULL) return 0;
-    strb->endLink->buf->last_in_chain = 1;
+    strb->capacity += bufs.size * bufs.num;
 
+    strb->endLink->next = ngx_create_chain_of_bufs(strb->pool, &bufs);
+    if(strb->endLink == NULL) return 0;
+
+    while(strb->endLink->next != NULL) strb->endLink = strb->endLink->next;
+
+    logDebugMsg8(connLog, "<strbEnsureCapacity(capacity=%D) strb(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d, lastLink->next=%d)", capacity, strb->size, strbCurSize(strb), strb->capacity, strb->startLink, strb->lastLink, strb->endLink, strb->lastLink->next);
     return 1;
 }
 
 int strbEnsureContinuousCapacity(strb_t *strb, int32_t capacity) {
-    ngx_chain_t *chain;
+    ngx_chain_t *chain = strb->lastLink;
 
+    logDebugMsg7(connLog, ">strbEnsureContinuousCapacity(capacity=%D) strb(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d)", capacity, strb->size, strbCurSize(strb), strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
     if(capacity < 1) return 1;
-    if(strbCurLast(strb) == strbCurEnd(strb)) strbUseNextChain(strb);
+    if(strbCurLast(strb) == strbCurEnd(strb)) strb->lastLink = strb->lastLink->next;
     if(strb->lastLink != NULL && strbCurFree(strb) >= capacity) return 1;
     
+    chain->buf->last_in_chain = 0;
+
     chain = ngx_alloc_chain_link(strb->pool);
     if(chain == NULL) return 0;
 
     chain->buf = ngx_create_temp_buf(strb->pool, capacity);
     if(chain->buf == NULL) return 0;
+
+    chain->buf->last_in_chain = 1;
 
     if(strb->lastLink == NULL || strbCurStart(strb) == strbCurLast(strb)) {
         chain->next = strb->lastLink;
@@ -82,18 +98,21 @@ int strbEnsureContinuousCapacity(strb_t *strb, int32_t capacity) {
     strb->capacity += capacity;
     strb->lastLink = chain;
 
+    logDebugMsg7(connLog, "<strbEnsureContinuousCapacity(capacity=%D) strb(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d)", capacity, strb->size, strbCurSize(strb), strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
     return 1;
 }
 
 int strbSetSize(strb_t *strb, int32_t size) {
+    logDebugMsg8(connLog, ">strbSetSize(size=%D) strb(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d, lastLink->next=%d)", size, strb->size, strbCurSize(strb), strb->capacity, strb->startLink, strb->lastLink, strb->endLink, strb->lastLink->next);
     if(size < 0) return 0;
-    if(!strbEnsureCapacity(strb, size)) return 0;
 
     if(strb->size < size) {
+        if(!strbEnsureCapacity(strb, size)) return 0;
+
         size = size - strb->size;
         while(size) {
             int32_t toSet = ngx_min(strbCurFree(strb), size);
-            ngx_memzero(strbCurLast(strb), size);
+            //ngx_memzero(strbCurLast(strb), size);
             strbCurLast(strb) += toSet;
 
             strb->size += toSet;
@@ -127,60 +146,68 @@ int strbSetSize(strb_t *strb, int32_t size) {
         }
         strb->size = size;
     }
+    logDebugMsg8(connLog, "<strbSetSize(size=%D) strb(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d, lastLink->next=%d)", size, strb->size, strbCurSize(strb), strb->capacity, strb->startLink, strb->lastLink, strb->endLink, strb->lastLink->next);
     return 1;
 }
 
 int strbAppendMemory(strb_t *strb, u_char *src, int32_t size) {
-    int32_t unusedSpace, copyLength;
-    u_char *srcLimit = src + size;
+    int32_t copyLength;
 
+    logDebugMsg8(connLog, ">strbAppendMemory(size=%D) strb(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d, lastLink->next=%d)", size, strb->size, strbCurSize(strb), strb->capacity, strb->startLink, strb->lastLink, strb->endLink, strb->lastLink->next);
     if(size < 0) return 0;
     if(!strbEnsureFreeCapacity(strb, size)) return 0;
 
-    while(src < srcLimit) {
-        unusedSpace = strbCurFree(strb);
-        copyLength = ngx_min(unusedSpace, size);
+    while(size != 0) {
+        copyLength = ngx_min(strbCurFree(strb), size);
 
         strbCurLast(strb) = ngx_cpymem(strbCurLast(strb), src, copyLength);
         strb->size += copyLength;
+        size -= copyLength;
         src += copyLength;
 
-        if(copyLength == 0) strbUseNextChain(strb);
+        if(size != 0) strbUseNextChain(strb);
     }
+    logDebugMsg8(connLog, "<strbAppendMemory(size=%D) strb(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d, lastLink->next=%d)", size, strb->size, strbCurSize(strb), strb->capacity, strb->startLink, strb->lastLink, strb->endLink, strb->lastLink->next);
     return 1;
 }
 
 int strbAppendSingle(strb_t *strb, u_char value) {
+    logDebugMsg7(connLog, ">strbAppendSingle(value=%c) strb(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d)", value, strb->size, strbCurSize(strb), strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
     if(!strbEnsureFreeCapacity(strb, 1)) return 0;
     if(strbCurFree(strb) < 1) strbUseNextChain(strb);
     *(strbCurLast(strb)++) = value;
     strb->size++;
+    logDebugMsg7(connLog, "<strbAppendSingle(value=%c) strb(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d)", value, strb->size, strbCurSize(strb), strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
     return 1;
 }
 
-int strbAppendPad(strb_t *strb, u_char c, int32_t padLength) {
-    if(!strbEnsureFreeCapacity(strb, padLength)) return 0;
+int strbAppendRepeat(strb_t *strb, u_char c, int32_t length) {
+    logDebugMsg8(connLog, ">strbAppendRepeat(value=%c, padLength=%D) strb(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d)", c, length, strb->size, strbCurSize(strb), strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
+    if(!strbEnsureFreeCapacity(strb, length)) return 0;
 
-    strb->size += padLength;
-    while(padLength != 0) {
-        int32_t toPad = ngx_min(padLength, strbCurFree(strb));
+    strb->size += length;
+    while(length != 0) {
+        int32_t toPad = ngx_min(length, strbCurFree(strb));
         ngx_memset(strbCurLast(strb), c, toPad);
         strbCurLast(strb) += toPad;
-        padLength -= toPad;
+        length -= toPad;
 
-        if(padLength != 0) strbUseNextChain(strb);
+        if(length != 0) strbUseNextChain(strb);
     }
 
+    logDebugMsg8(connLog, "<strbAppendRepeat(value=%c, padLength=%D) strb(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d)", c, length, strb->size, strbCurSize(strb), strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
     return 1;
 }
 
 int strbAppendStrb(strb_t *dst, strb_t *src) {
     ngx_chain_t *chain = src->startLink;
+    logDebugMsg8(connLog, ">strbAppendStrb(src.size=%D) dst(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d, lastLink->next=%d)", src->size, dst->size, strbCurSize(dst), dst->capacity, dst->startLink, dst->lastLink, dst->endLink, dst->lastLink->next);
     while(chain != NULL) {
         if(chain->buf == NULL) return 0;
         strbAppendMemory(dst, chain->buf->start, chain->buf->last - chain->buf->start);
         chain = chain->next;
     }
+    logDebugMsg8(connLog, "<strbAppendStrb(src.size=%D) dst(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d, lastLink->next=%d)", src->size, dst->size, strbCurSize(dst), dst->capacity, dst->startLink, dst->lastLink, dst->endLink, dst->lastLink->next);
     return 1;
 }
 
@@ -228,10 +255,12 @@ int strbFragmentingInsertMemory(strb_t *strb, int32_t dstPos, u_char *src, int32
 //Copy paste from ngx_string.c (v1.4.1). Modified to more efficiently use strb_t
 static int strbFormatNum(strb_t *strb, uint64_t ui64, u_char zero, ngx_uint_t hexadecimal, ngx_uint_t width) {
     u_char         *p, temp[NGX_INT64_LEN + 1];
-    size_t          len;
+    int32_t          len;
     uint32_t        ui32;
     static u_char   hex[] = "0123456789abcdef";
     static u_char   HEX[] = "0123456789ABCDEF";
+
+    logDebugMsg6(connLog, ">strbFormatNum() dst(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d)", strb->size, strbCurSize(strb), strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
 
     p = temp + NGX_INT64_LEN;
 
@@ -251,12 +280,13 @@ static int strbFormatNum(strb_t *strb, uint64_t ui64, u_char zero, ngx_uint_t he
         do { *--p = HEX[(uint32_t) (ui64 & 0xf)]; } while (ui64 >>= 4);
     }
 
-    len = (temp + NGX_INT64_LEN) - p;
-    while(len++ < width) if(!strbAppendSingle(strb, zero)) return 0;
+    len = (int32_t)width - ((temp + NGX_INT64_LEN) - p);
+    if(len > 0) strbAppendRepeat(strb, zero, len);
 
     len = (temp + NGX_INT64_LEN) - p;
     if(!strbAppendMemory(strb, p, len)) return 0;
 
+    logDebugMsg6(connLog, "<strbFormatNum() dst(size=%D, bufSize=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d)", strb->size, strbCurSize(strb), strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
     return 1;
 }
 
@@ -276,6 +306,7 @@ int strbVFormat(strb_t *strb, const char *fmt, va_list args) {
 
     while(*fmt) {
         if(!strbEnsureFreeCapacity(strb, 1)) return 0;
+        if(strbCurFree(strb) == 0) strbUseNextChain(strb);
 
         if(*fmt == '%') {
             zero = (u_char)((*++fmt == '0') ? '0' : ' ');
@@ -417,7 +448,7 @@ int strbVFormat(strb_t *strb, const char *fmt, va_list args) {
                 f = va_arg(args, double);
 
                 if(f < 0) {
-                    if(!strbAppendSingle(strb, '-')) return 0;
+                    *(strbCurLast(strb)++) = '-'; strb->size++;
                     f = -f;
                 }
 
@@ -439,7 +470,7 @@ int strbVFormat(strb_t *strb, const char *fmt, va_list args) {
                 if(!strbFormatNum(strb, ui64, zero, 0, width)) return 0;
 
                 if(frac_width) {
-                    if(!strbAppendSingle(strb, '.')) return 0;
+                    *(strbCurLast(strb)++) = '.'; strb->size++;
                     if(!strbFormatNum(strb, ui64, zero, 0, width)) return 0;
                 }
                 fmt++;
@@ -462,36 +493,37 @@ int strbVFormat(strb_t *strb, const char *fmt, va_list args) {
 
             case 'c':
                 d = va_arg(args, int);
-                if(!strbAppendSingle(strb, (u_char)(d & 0xff))) return 0;
+                *(strbCurLast(strb)++) = (u_char)(d & 0xff); strb->size++;
                 fmt++;
                 continue;
 
             case 'Z':
-                if(!strbAppendSingle(strb, '\0')) return 0;
+                *(strbCurLast(strb)++) = '\0'; strb->size++;
                 fmt++;
                 continue;
 
             case 'N':
 #if(NGX_WIN32)
-                if(!strbAppendSingle(strb, CR)) return 0;
+                *(strbCurLast(strb)++) = CR; strb->size++;
+                strbEnsureFreeCapacity(strb, 1);
 #endif
-                if(!strbAppendSingle(strb, LF)) return 0;
+                *(strbCurLast(strb)++) = LF; strb->size++;
                 fmt++;
                 continue;
 
             case '%':
-                if(!strbAppendSingle(strb, '%')) return 0;
+                *(strbCurLast(strb)++) = '%'; strb->size++;
                 fmt++;
                 continue;
 
             default:
-                if(!strbAppendSingle(strb, *fmt++)) return 0;
+                *(strbCurLast(strb)++) = *fmt++; strb->size++;
                 continue;
             }
 
             if(sign) {
                 if(i64 < 0) {
-                    if(!strbAppendSingle(strb, '-')) return 0;
+                    *(strbCurLast(strb)++) = '-'; strb->size++;
                     ui64 = (uint64_t) -i64;
 
                 } else {
@@ -502,7 +534,7 @@ int strbVFormat(strb_t *strb, const char *fmt, va_list args) {
             fmt++;
 
         } else {
-            if(!strbAppendSingle(strb, *fmt++)) return 0;
+            *(strbCurLast(strb)++) = *fmt++; strb->size++;
         }
     }
 
@@ -514,9 +546,11 @@ int strbFormat(strb_t *strb, const char *fmt, ...) {
     int rc;
     va_list args;
 
+    logDebugMsg6(connLog, ">strbFormat(fmt=%s) strb(size=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d)", fmt, strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
     va_start(args, fmt);
     rc = strbVFormat(strb, fmt, args);
     va_end(args);
+    logDebugMsg6(connLog, "<strbFormat(fmt=%s) strb(size=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d)", fmt, strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
 
     return rc;
 }
@@ -655,6 +689,7 @@ int strbEscapeHtml(strb_t *strb, u_char *src, int32_t size) {
         size--;
     }
     strbCurLast(strb) += len;
+    strb->size += len;
 
     return 1;
 }
@@ -672,11 +707,12 @@ int strbToCString(strb_t *strb, u_char **data) {
     chain = strb->startLink;
 
     for(;;) {
+        logDebugMsg1(connLog, "strbToCString BufferSize=%d", chain->buf->last - chain->buf->start);
         last = ngx_cpymem(last, chain->buf->start, chain->buf->last - chain->buf->start);
         if(chain == strb->lastLink) break;
         chain = chain->next;
     }
-    last = 0;
+    *last = '\0';
 
     return 1;
 }
@@ -686,6 +722,7 @@ int strbTransformStrb(strb_t *dst, strb_t *src, strbTransform_fptr strbTransform
     u_char *srcData;
     va_list args;
 
+    logDebugMsg6(connLog, ">strbTransformStrb(src.size=%D) dst(size=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d)", src->size, dst->size, dst->capacity, dst->startLink, dst->lastLink, dst->endLink);
     if(!strbToCString(src, &srcData)) return 0;
 
     va_start(args, strbTransformMethod);
@@ -693,6 +730,7 @@ int strbTransformStrb(strb_t *dst, strb_t *src, strbTransform_fptr strbTransform
     va_end(args);
     free(srcData);
 
+    logDebugMsg6(connLog, "<strbTransformStrb(src.size=%D) dst(size=%D, capacity=%D, startLink=%d, lastLink=%d, endLink=%d)", src->size, dst->size, dst->capacity, dst->startLink, dst->lastLink, dst->endLink);
     return returnCode;
 }
 

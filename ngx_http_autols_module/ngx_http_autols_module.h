@@ -77,7 +77,7 @@ static u_char defaultPageTemplate[] =
     "  </body>" CRLF
     "</html>";
 
-static int mergeCallCount = 0, handlerInvokeCount = 0;
+static int mergeCallCount = 0, handlerInvokeCount = 0, templateParseCount = 0;
 
 typedef ngx_int_t ngx_rc_t;
 #define ngx_str_compare(a,b) ((a)->len == (b)->len && !ngx_memcmp((a)->data, (b)->data, (a)->len))
