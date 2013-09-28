@@ -50,6 +50,7 @@ static ngx_str_t tplAttEscapeStr = ngx_string("Escape");
 static ngx_str_t tplAttUriComponentStr = ngx_string("UriComponent");
 static ngx_str_t tplAttHttpStr = ngx_string("Http");
 static ngx_str_t tplAttUriStr = ngx_string("Uri");
+static ngx_str_t tplAttFormatStr = ngx_string("Format");
 
 static u_char defaultPageTemplate[] =
     "<!DOCTYPE html>" CRLF
@@ -73,7 +74,7 @@ static u_char defaultPageTemplate[] =
     "  <body bgcolor=\"white\">&{BodyStart}" CRLF
     "    <h1>Index of &{RequestUri}</h1>" CRLF
     "    <hr>" CRLF
-    "    <pre>&{EntryStart}<a href=\"&{EntryName?Escape=UriComponent&NoCount}\">&{EntryName}</a>&{EntryModifiedOn?StartAt=82}&{EntrySize?StartAt=98}&{EntryEnd}</pre>&{BodyEnd}" CRLF
+    "    <pre>&{EntryStart}<a href=\"&{EntryName?Escape=Uri&NoCount}\">&{EntryName}</a>&{EntryModifiedOn?StartAt=82} &{EntrySize?Format=%24s}&{EntryEnd}</pre>&{BodyEnd}" CRLF
     "  </body>" CRLF
     "</html>";
 

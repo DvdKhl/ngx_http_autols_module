@@ -6,7 +6,7 @@
 
 ngx_log_t *connLog;
 
-#define DEBUG_STRINGBUILDER 0
+#define DEBUG_STRINGBUILDER 1
 
 #if DEBUG_STRINGBUILDER
 #define logDebugMsg0(log, fmt)                                                 ngx_log_debug0(NGX_LOG_DEBUG_HTTP, log, 0, fmt)

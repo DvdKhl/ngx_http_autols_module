@@ -363,10 +363,15 @@ int strbVFormat(strb_t *strb, const char *fmt, va_list args) {
 
             case 's':
                 p = va_arg(args, u_char *);
+                if(slen == (size_t)-1 && width != 0) {
+                    slen = strlen((char*)p);
+                    width -= slen;
+                }
 
                 if(slen == (size_t)-1) {
                     strbAppendCString(strb, p); 
                 } else {
+                    if(!strbAppendRepeat(strb, zero, width)) return 0;
                     if(!strbAppendMemory(strb, p, slen)) return 0;
                 }
                 fmt++;

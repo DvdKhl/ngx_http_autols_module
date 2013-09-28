@@ -500,9 +500,9 @@ static int parseTemplate(connectionConf_T *conConf) {
 
             if(*tpl == '=') {
                 attributeValueStart = ++tpl;
-                while(((*tpl >= 'A' && *tpl <= 'Z') || (*tpl >= 'a' && *tpl <= 'z') || (*tpl >= '0' && *tpl <= '9')) && ++tpl < tplLast) ;
+                while((*tpl != '}' && *tpl != '&') && ++tpl < tplLast) ;
                 attributeValueLength = tpl - attributeValueStart;
-                if(attributeValueLength == 0 || tpl >= tplLast || (*tpl != '}' && *tpl != '&')) return 0;
+                if(attributeValueLength == 0 || tpl >= tplLast) return 0;
             } else { attributeValueStart = NULL; attributeValueLength = 0; }
 
             attribute = (templateTokenAttribute_t*)ngx_array_push(&token->attributes);
@@ -545,8 +545,8 @@ static int appendTokenValue(templateToken_t *token, strb_t *strb, connectionConf
 
     //Cannot use conConf->pool if the instance is used for more than one connection
     if(pool == NULL && (pool = ngx_create_pool(512, conConf->log)) == NULL) return 0;
-    if(!strbA.isInitialized && !strbInit(&strbA, pool, 256, 256)) return 0;
-    if(!strbB.isInitialized && !strbInit(&strbB, pool, 256, 256)) return 0;
+    if(!strbA.isInitialized && !strbInit(&strbA, pool, 4 * 256, 4 * 256)) return 0;
+    if(!strbB.isInitialized && !strbInit(&strbB, pool, 4 * 256, 4 * 256)) return 0;
 
     if(token->attributes.nelts == 0) {
         curStrb = strb;
@@ -603,6 +603,13 @@ static int appendTokenValue(templateToken_t *token, strb_t *strb, connectionConf
         } else if(ngx_str_compare(&attribute->name, &tplAttNoCountStr)) {
             conConf->tplEntryStartPos += prevStrb->size;
 
+        } else if(ngx_str_compare(&attribute->name, &tplAttFormatStr)) {
+            //Points to the template data so there is always enough space to add a null termination
+            u_char oldChar = *(attribute->value.data + attribute->value.len); //TODO: Make less hacky
+            *(attribute->value.data + attribute->value.len) = '\0';
+            if(!strbTransformStrb(curStrb, prevStrb, strbTransFormat, attribute->value.data)) return 0;
+            *(attribute->value.data + attribute->value.len) = oldChar;
+
         } else if(ngx_str_compare(&attribute->name, &tplAttEscapeStr)) {
             if(ngx_str_compare(&attribute->value, &tplAttUriComponentStr)) {
                 if(!strbTransformStrb(curStrb, prevStrb, strbTransEscapeUri, NGX_ESCAPE_URI_COMPONENT)) return 0;
@@ -612,7 +619,7 @@ static int appendTokenValue(templateToken_t *token, strb_t *strb, connectionConf
                 if(!strbTransformStrb(curStrb, prevStrb, strbTransEscapeHtml)) return 0;
             } else return 0;
         }
-
+        logHttpDebugMsg1(conConf, "autols: Attribute processed", &attribute->name);
         if(curStrb->size != 0) { //Swap StringBuilders iff current one has contents
             tmpStrb = curStrb;
             curStrb = prevStrb;
