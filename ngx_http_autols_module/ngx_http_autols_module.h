@@ -11,15 +11,18 @@
 #error STRING_PREALLOCATE must at least be higher than 0
 #endif
 
-#define logHttpDebugMsg0(conConf, fmt)                                                 ngx_log_debug0(NGX_LOG_DEBUG_HTTP, (conConf)->log, 0, fmt)
-#define logHttpDebugMsg1(conConf, fmt, arg1)                                           ngx_log_debug1(NGX_LOG_DEBUG_HTTP, (conConf)->log, 0, fmt, arg1)
-#define logHttpDebugMsg2(conConf, fmt, arg1, arg2)                                     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, (conConf)->log, 0, fmt, arg1, arg2)
-#define logHttpDebugMsg3(conConf, fmt, arg1, arg2, arg3)                               ngx_log_debug3(NGX_LOG_DEBUG_HTTP, (conConf)->log, 0, fmt, arg1, arg2, arg3)
-#define logHttpDebugMsg4(conConf, fmt, arg1, arg2, arg3, arg4)                         ngx_log_debug4(NGX_LOG_DEBUG_HTTP, (conConf)->log, 0, fmt, arg1, arg2, arg3, arg4)
-#define logHttpDebugMsg5(conConf, fmt, arg1, arg2, arg3, arg4, arg5)                   ngx_log_debug5(NGX_LOG_DEBUG_HTTP, (conConf)->log, 0, fmt, arg1, arg2, arg3, arg4, arg5)
-#define logHttpDebugMsg6(conConf, fmt, arg1, arg2, arg3, arg4, arg5, arg6)             ngx_log_debug6(NGX_LOG_DEBUG_HTTP, (conConf)->log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6)
-#define logHttpDebugMsg7(conConf, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)       ngx_log_debug7(NGX_LOG_DEBUG_HTTP, (conConf)->log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
-#define logHttpDebugMsg8(conConf, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) ngx_log_debug8(NGX_LOG_DEBUG_HTTP, (conConf)->log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
+#define CLOSE_DIRECTORY_OK 0
+#define CLOSE_DIRECTORY_ERROR 1
+
+#define logHttpDebugMsg0(log, fmt)                                                 ngx_log_debug0(NGX_LOG_DEBUG_HTTP, log, 0, fmt)
+#define logHttpDebugMsg1(log, fmt, arg1)                                           ngx_log_debug1(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1)
+#define logHttpDebugMsg2(log, fmt, arg1, arg2)                                     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2)
+#define logHttpDebugMsg3(log, fmt, arg1, arg2, arg3)                               ngx_log_debug3(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3)
+#define logHttpDebugMsg4(log, fmt, arg1, arg2, arg3, arg4)                         ngx_log_debug4(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4)
+#define logHttpDebugMsg5(log, fmt, arg1, arg2, arg3, arg4, arg5)                   ngx_log_debug5(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4, arg5)
+#define logHttpDebugMsg6(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6)             ngx_log_debug6(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6)
+#define logHttpDebugMsg7(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)       ngx_log_debug7(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
+#define logHttpDebugMsg8(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) ngx_log_debug8(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
 
 static ngx_str_t tplReplyCharSetStr = ngx_string("ReplyCharSet");
 static ngx_str_t tplRequestUriStr = ngx_string("RequestUri");
@@ -51,8 +54,9 @@ static ngx_str_t tplAttUriComponentStr = ngx_string("UriComponent");
 static ngx_str_t tplAttHttpStr = ngx_string("Http");
 static ngx_str_t tplAttUriStr = ngx_string("Uri");
 static ngx_str_t tplAttFormatStr = ngx_string("Format");
+static ngx_str_t tplAttMaxLengthStr = ngx_string("MaxLength");
 
-static u_char defaultPageTemplate[] =
+static u_char defaultPagePattern[] =
     "<!DOCTYPE html>" CRLF
     "<html>" CRLF
     "  <head>" CRLF
@@ -74,36 +78,64 @@ static u_char defaultPageTemplate[] =
     "  <body bgcolor=\"white\">&{BodyStart}" CRLF
     "    <h1>Index of &{RequestUri}</h1>" CRLF
     "    <hr>" CRLF
-    "    <pre>&{EntryStart}<a href=\"&{EntryName?Escape=Uri&NoCount}\">&{EntryName}</a>&{EntryModifiedOn?StartAt=82} &{EntrySize?Format=%24s}&{EntryEnd}</pre>&{BodyEnd}" CRLF
+    "    <pre>&{EntryStart}<a href=\"&{EntryName?Escape=Uri&NoCount}\">&{EntryName?MaxLength=66}</a>&{EntryModifiedOn?StartAt=82} &{EntrySize?Format=%24s}&{EntryEnd}</pre>&{BodyEnd}" CRLF
     "  </body>" CRLF
     "</html>";
 
-static int mergeCallCount = 0, handlerInvokeCount = 0, templateParseCount = 0;
+enum {
+    CounterMainMergeCall, CounterSrvMergeCall, CounterLocMergeCall,
+    CounterMainCreateCall, CounterSrvCreateCall, CounterLocCreateCall,
+    CounterHandlerInvoke, CounterPatternParse, CounterFileCount, CounterLimit
+};
+static const char *counterNames[] = {
+    "MainMergeCall","SrvMergeCall","LocMergeCall",
+    "MainCreateCall","SrvCreateCall","LocCreateCall",
+    "HandlerInvoke", "TemplateParse", "FileCount"
+};
+static int counters[CounterLimit];
 
-typedef ngx_int_t ngx_rc_t;
 #define ngx_str_compare(a,b) ((a)->len == (b)->len && !ngx_memcmp((a)->data, (b)->data, (a)->len))
 
+typedef ngx_int_t ngx_rc_t;
 static ngx_rc_t ngx_http_autols_init(ngx_conf_t *cf);
+
+static void *ngx_http_autols_create_main_conf(ngx_conf_t *cf);
+static char *ngx_http_autols_init_main_conf(ngx_conf_t *cf, void *conf);
+
 static void *ngx_http_autols_create_loc_conf(ngx_conf_t *cf);
 static char *ngx_http_autols_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child);
 
-typedef struct { ngx_str_t name, value; } templateTokenAttribute_t;
+
+typedef struct { ngx_str_t name, value; } patternAttribute_t;
 
 typedef struct {
     ngx_str_t name;
     size_t startAt, endAt;
     ngx_array_t attributes;
-} templateToken_t;
+} patternToken_t;
+
+typedef struct {
+    ngx_str_t path;
+
+    ngx_str_t content;
+    ngx_array_t tokens;
+} pattern_t;
+
+
+typedef struct {
+    ngx_pool_t *pool;
+
+    ngx_array_t patterns;
+} ngx_http_autols_main_conf_t;
 
 typedef struct {
     ngx_flag_t enable, createJsVariable, createBody, localTime;
-    ngx_str_t charSet, jsSourcePath, cssSourcePath, pageTemplatePath;
-    ngx_str_t pageTemplate;
-    ngx_array_t pageTemplateTokens;
+    ngx_str_t charSet, jsSourcePath, cssSourcePath, pagePatternPath;
 } ngx_http_autols_loc_conf_t;
 
 typedef struct {
-    ngx_http_autols_loc_conf_t *mainConf;
+    ngx_http_autols_main_conf_t *mainConf;
+    ngx_http_autols_loc_conf_t *locConf;
     ngx_http_request_t *request;
     ngx_pool_t *pool;
     ngx_log_t *log;
@@ -111,8 +143,10 @@ typedef struct {
     ngx_str_t requestPath;
     size_t requestPathCapacity;
 
+    //pattern_t *pattern;
     int32_t tplEntryStartPos;
 } connectionConf_T;
+
 
 typedef struct {
     ngx_array_t fileEntries;
@@ -131,13 +165,6 @@ typedef struct {
     ngx_tm_t       modifiedOn;
     off_t          size;
 } fileEntry_t;
-
-static int ngx_libc_cdecl fileEntryComparer(const void *one, const void *two);
-static ngx_rc_t logDirError(connectionConf_T *conConf, ngx_dir_t *dir, ngx_str_t *name);
-
-static templateToken_t* appendSection(templateToken_t *token, strb_t *strb, u_char *tpl, ngx_str_t *endTokenName, connectionConf_T *conConf, fileEntriesInfo_T *fileEntriesInfo);
-static int appendTokenValue(templateToken_t *token, strb_t *strb, connectionConf_T *conConf, fileEntry_t *fileEntry);
-static int parseTemplate(connectionConf_T *conConf);
 
 static ngx_command_t ngx_http_autols_commands[] = {
     { ngx_string("autols"),
@@ -193,7 +220,7 @@ static ngx_command_t ngx_http_autols_commands[] = {
     NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1, //TODO: NGX_CONF_FLAG?
     ngx_conf_set_str_slot,
     NGX_HTTP_LOC_CONF_OFFSET,
-    offsetof(ngx_http_autols_loc_conf_t, pageTemplatePath),
+    offsetof(ngx_http_autols_loc_conf_t, pagePatternPath),
     NULL },
 
     ngx_null_command
@@ -203,8 +230,8 @@ static ngx_http_module_t  ngx_http_autols_module_ctx = {
     NULL,                              /* preconfiguration */
     ngx_http_autols_init,              /* postconfiguration */
 
-    NULL,                              /* create main configuration */
-    NULL,                              /* init main configuration */
+    ngx_http_autols_create_main_conf,  /* create main configuration */
+    ngx_http_autols_init_main_conf,   /* init main configuration */
 
     NULL,                              /* create server configuration */
     NULL,                              /* merge server configuration */

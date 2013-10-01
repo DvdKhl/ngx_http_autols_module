@@ -72,6 +72,7 @@ int strbEnsureContinuousCapacity(strb_t *strb, int32_t capacity) {
     chain->buf->last_in_chain = 1;
 
     if(strb->lastLink == NULL || strbCurStart(strb) == strbCurLast(strb)) {
+        if(strb->startLink == strb->lastLink) strb->startLink = chain;
         chain->next = strb->lastLink;
         strb->lastLink = chain;
 
@@ -86,9 +87,10 @@ int strbEnsureContinuousCapacity(strb_t *strb, int32_t capacity) {
         restChain->buf->pos = strbCurLast(strb);
         restChain->buf->last = strbCurLast(strb);
         restChain->buf->start = strbCurLast(strb);
-        restChain->buf->end = restChain->buf->start + strbCurFree(strb);
+        restChain->buf->end = strbCurEnd(strb);
 
         strbCurEnd(strb) = strbCurLast(strb);
+        if(strb->endLink == strb->lastLink) strb->startLink = restChain;
 
         restChain->next = strb->lastLink->next;
         chain->next = restChain;
