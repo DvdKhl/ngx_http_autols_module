@@ -73,11 +73,11 @@ static int filterFileExactMatch(ngx_str_t *path, ngx_array_t *filters, ngx_log_t
 }
 static int filterFile(ngx_str_t *path, ngx_array_t *filters, ngx_log_t *log) {
     if(filters == NULL) return 0;
-#if NGX_PCRE
-    return ngx_regex_exec_array(filters, path, log) == NGX_OK;
-#else
-    return filterFileExactMatch(path, filters, log);
-#endif
+    if(hasRegex) {
+        return ngx_regex_exec_array(filters, path, log) == NGX_OK;
+    } else {
+        return filterFileExactMatch(path, filters, log);
+    }
 }
 
 
@@ -847,9 +847,9 @@ static char* ngx_conf_autols_regex_array_slot(ngx_conf_t *cf, ngx_command_t *cmd
 }
 
 static char* ngx_conf_autols_regex_then_string_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
-#if NGX_PCRE
-    return ngx_conf_autols_regex_array_slot(cf, cmd, conf);
-#else
-    return ngx_conf_set_str_array_slot(cf, cmd, conf);
-#endif
+    if(hasRegex) {
+        return ngx_conf_autols_regex_array_slot(cf, cmd, conf);
+    } else {
+        return ngx_conf_set_str_array_slot(cf, cmd, conf);
+    }
 }

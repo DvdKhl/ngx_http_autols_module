@@ -5,6 +5,12 @@
 #include <ngx_http.h>
 #include "strb.h"
 
+#if NGX_PCRE
+static int hasRegex = 1;
+#else
+static int hasRegex = 0;
+#endif
+
 
 #define STRING_PREALLOCATE  50
 #if STRING_PREALLOCATE < 1
