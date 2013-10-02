@@ -105,6 +105,7 @@ static char *ngx_http_autols_init_main_conf(ngx_conf_t *cf, void *conf);
 static void *ngx_http_autols_create_loc_conf(ngx_conf_t *cf);
 static char *ngx_http_autols_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child);
 
+static char* ngx_conf_autols_regex_then_string_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 typedef struct { ngx_str_t name, value; } patternAttribute_t;
 
@@ -131,6 +132,7 @@ typedef struct {
 typedef struct {
     ngx_flag_t enable, createJsVariable, createBody, localTime;
     ngx_str_t charSet, jsSourcePath, cssSourcePath, pagePatternPath;
+    ngx_array_t *entryIgnores;
 } ngx_http_autols_loc_conf_t;
 
 typedef struct {
@@ -143,9 +145,8 @@ typedef struct {
     ngx_str_t requestPath;
     size_t requestPathCapacity;
 
-    //pattern_t *pattern;
     int32_t tplEntryStartPos;
-} connectionConf_T;
+} conConf_t;
 
 
 typedef struct {
@@ -169,9 +170,16 @@ typedef struct {
 static ngx_command_t ngx_http_autols_commands[] = {
     { ngx_string("autols"),
     NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_FLAG, //TODO: NGX_CONF_FLAG?
-    ngx_conf_set_flag_slot, //TODO: Custom function
+    ngx_conf_set_flag_slot,
     NGX_HTTP_LOC_CONF_OFFSET,
     offsetof(ngx_http_autols_loc_conf_t, enable),
+    NULL },
+
+    { ngx_string("autols_ignore"),
+    NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_1MORE, //TODO: NGX_CONF_FLAG?
+    ngx_conf_autols_regex_then_string_array_slot,
+    NGX_HTTP_LOC_CONF_OFFSET,
+    offsetof(ngx_http_autols_loc_conf_t, entryIgnores),
     NULL },
 
     { ngx_string("autols_create_js_variable"),
