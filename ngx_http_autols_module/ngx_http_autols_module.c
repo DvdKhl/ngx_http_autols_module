@@ -83,10 +83,7 @@ static int filterFile(ngx_str_t *path, ngx_array_t *filters, ngx_log_t *log) {
 
 static int appendFileName(conConf_t *conConf, ngx_dir_t *dir, ngx_str_t *dst, size_t *dstCap) {
     size_t fileNameLength;
-    ngx_err_t err;
     u_char *last;
-
-    if(dir->valid_info) return NGX_OK;
 
     fileNameLength = ngx_de_namelen(dir);
     last = dst->data + dst->len;
@@ -412,12 +409,10 @@ static ngx_rc_t setRequestPath(conConf_t *conConf) {
 
     last = ngx_http_map_uri_to_path(conConf->request, &conConf->requestPath, &root, STRING_PREALLOCATE);
     if(last == NULL) return NGX_HTTP_INTERNAL_SERVER_ERROR;
-    reqPath = &conConf->requestPath;
 
-    conConf->requestPathCapacity = reqPath->len;
-    reqPath->len = last - reqPath->data;
-    if(reqPath->len > 1) reqPath->len--;
-    reqPath->data[reqPath->len] = '\0';
+    reqPath = &conConf->requestPath;
+    conConf->requestPathCapacity = conConf->requestPath.len;
+    reqPath->len = last - conConf->requestPath.data;
 
     logHttpDebugMsg1(conConf->log, "autols: Request Path \"%V\"", reqPath);
     return NGX_OK;
@@ -482,51 +477,26 @@ static ngx_rc_t readDirectory(conConf_t *conConf, ngx_dir_t *dir) {
     return NGX_AGAIN;
 }
 
-static ngx_rc_t checkFSEntry(conConf_t *conConf, ngx_dir_t *dir, size_t fileNameLength) {
-    ngx_str_t *reqPath;
-    size_t reqPathCap;
+static ngx_rc_t checkFSEntry(conConf_t *conConf, ngx_dir_t *dir, u_char *filePath) {
     ngx_err_t err;
-    u_char *last;
 
     if(dir->valid_info) return NGX_OK;
 
-    reqPath = &conConf->requestPath;
-    reqPathCap = conConf->requestPathCapacity;
-    last = reqPath->data + reqPath->len;
-
-    //Building file path: include terminating '\0'
-    logHttpDebugMsg0(conConf->log, "autols: Checking if filepath is valid");
-    if(reqPath->len + fileNameLength + 1 > reqPathCap) {
-        u_char *filePath = reqPath->data;
-
-        logHttpDebugMsg0(conConf->log, "autols: Increasing path capacity to store full filepath");
-        reqPathCap = reqPath->len + fileNameLength + 1 + STRING_PREALLOCATE;
-
-        filePath = (u_char*)ngx_pnalloc(conConf->pool, reqPathCap);
-        if(filePath == NULL) return closeDirectory(conConf, dir, CLOSE_DIRECTORY_ERROR);
-
-        last = ngx_cpystrn(filePath, reqPath->data, reqPath->len + 1);
-
-        reqPath->data = filePath;
-        conConf->requestPathCapacity = reqPathCap;
-    }
-    last = ngx_cpystrn(last, ngx_de_name(dir), fileNameLength + 1);
-
-    logHttpDebugMsg1(conConf->log, "autols: Full path: \"%s\"", reqPath->data);
-    if(ngx_de_info(reqPath->data, dir) == NGX_FILE_ERROR) {
+    logHttpDebugMsg1(conConf->log, "autols: Full path: \"%s\"", filePath);
+    if(ngx_de_info(filePath, dir) == NGX_FILE_ERROR) {
         err = ngx_errno;
 
         if(err != NGX_ENOENT && err != NGX_ELOOP) {
             ngx_log_error(NGX_LOG_CRIT, conConf->log, err,
-                "autols: " ngx_de_info_n " \"%V\" failed", reqPath);
+                "autols: " ngx_de_info_n " \"%s\" failed", filePath);
 
             if(err == NGX_EACCES) return NGX_EACCES; //TODO: Make sure there are no flag collisions
             return closeDirectory(conConf, dir, CLOSE_DIRECTORY_ERROR);
         }
 
-        if(ngx_de_link_info(reqPath->data, dir) == NGX_FILE_ERROR) {
+        if(ngx_de_link_info(filePath, dir) == NGX_FILE_ERROR) {
             ngx_log_error(NGX_LOG_CRIT, conConf->log, ngx_errno,
-                "autols: " ngx_de_link_info_n " \"%V\" failed", reqPath);
+                "autols: " ngx_de_link_info_n " \"%s\" failed", filePath);
 
             return closeDirectory(conConf, dir, CLOSE_DIRECTORY_ERROR);
         }
@@ -557,65 +527,66 @@ static ngx_rc_t sendHeaders(conConf_t *conConf, ngx_dir_t *dir) {
 }
 
 static ngx_rc_t getFiles(conConf_t *conConf, ngx_dir_t *dir, fileEntriesInfo_T *fileEntriesInfo) {
+    size_t       filePathCapacity;
     ngx_int_t    gmtOffset;
-    ngx_str_t   *reqPath;
+    ngx_str_t    filePath;
     fileEntry_t *entry;
     ngx_rc_t rc;
 
     gmtOffset = (ngx_timeofday())->gmtoff * 60;
-    reqPath   = &conConf->requestPath;
+    filePath  = conConf->requestPath;
+    filePathCapacity = conConf->requestPathCapacity;
 
     fileEntriesInfo->totalFileNamesLength =
         fileEntriesInfo->totalFileNamesLengthUriEscaped =
         fileEntriesInfo->totalFileNamesLengthHtmlEscaped = 0;
 
-    if(conConf->requestPathCapacity <= reqPath->len + 1) return NGX_ERROR;
-    reqPath->data[reqPath->len++] = '/';
-    reqPath->data[reqPath->len] = '\0';
-
     counters[CounterFileCount] = 0;
     logHttpDebugMsg0(conConf->log, "autols: ##Iterating files");
     while((rc = readDirectory(conConf, dir)) == NGX_AGAIN) {
-        size_t fileNameLength;
 
-        counters[CounterFileCount]++;
-        fileNameLength = ngx_de_namelen(dir);
-        fileEntriesInfo->totalFileNamesLength += fileNameLength;
         logHttpDebugMsg1(conConf->log, "autols: #File \"%s\"", ngx_de_name(dir));
 
         //Skip "current directory" path
         if(ngx_de_name(dir)[0] == '.' && ngx_de_name(dir)[1] == '\0') continue;
 
-        rc = checkFSEntry(conConf, dir, fileNameLength);
+        //Append filename to request path
+        filePath.len = conConf->requestPath.len;
+        if(!appendFileName(conConf, dir, &filePath, &filePathCapacity)) {
+            return closeDirectory(conConf, dir, CLOSE_DIRECTORY_ERROR);
+        }
+
+        rc = checkFSEntry(conConf, dir, filePath.data);
         if(rc == NGX_EACCES) continue;
-        if(rc != NGX_OK) return rc;
+        if(rc != NGX_OK) return closeDirectory(conConf, dir, CLOSE_DIRECTORY_ERROR);
 
         //Filter files specified in config
-        if(filterFile(NULL, conConf->locConf->entryIgnores, conConf->log)) continue;
+        if(filterFile(&filePath, conConf->locConf->entryIgnores, conConf->log)) continue;
 
-        logHttpDebugMsg1(conConf->log, "autols: Retrieving file info (Index=%d)", fileEntriesInfo->fileEntries.nelts);
+        logHttpDebugMsg1(conConf->log, "autols: Populating fileEntry_t (Index=%d)", fileEntriesInfo->fileEntries.nelts);
         entry = (fileEntry_t*)ngx_array_push(&fileEntriesInfo->fileEntries);
         if(entry == NULL) return closeDirectory(conConf, dir, CLOSE_DIRECTORY_ERROR);
 
-        entry->name.len = fileNameLength;
-        entry->name.data = (u_char*)ngx_pnalloc(conConf->pool, fileNameLength + 1);
+        entry->name.len = filePath.len - conConf->requestPath.len;
+        entry->name.data = (u_char*)ngx_pnalloc(conConf->pool, entry->name.len + 1);
         if(entry->name.data == NULL) return closeDirectory(conConf, dir, CLOSE_DIRECTORY_ERROR);
-        ngx_cpystrn(entry->name.data, ngx_de_name(dir), fileNameLength + 1);
+        ngx_cpystrn(entry->name.data, ngx_de_name(dir), entry->name.len + 1);
 
         //With local time offset if specified
         ngx_gmtime(ngx_de_mtime(dir) + gmtOffset * conConf->locConf->localTime, &entry->modifiedOn);
         entry->isDirectory = ngx_de_is_dir(dir);
         entry->size = ngx_de_size(dir);
 
-        fileEntriesInfo->totalFileNamesLengthUriEscaped += entry->nameLenAsUri = fileNameLength +
+        fileEntriesInfo->totalFileNamesLength += filePath.len;
+        fileEntriesInfo->totalFileNamesLengthUriEscaped += entry->nameLenAsUri = entry->name.len +
             ngx_escape_uri(NULL, entry->name.data, entry->name.len, NGX_ESCAPE_URI_COMPONENT);
-
-        fileEntriesInfo->totalFileNamesLengthHtmlEscaped += entry->nameLenAsHtml = fileNameLength +
+        fileEntriesInfo->totalFileNamesLengthHtmlEscaped += entry->nameLenAsHtml = entry->name.len +
             ngx_escape_html(NULL, entry->name.data, entry->name.len);
-        logHttpDebugMsg0(conConf->log, "autols: File info retrieved");
 
+        logHttpDebugMsg0(conConf->log, "autols: File info retrieved");
+        counters[CounterFileCount]++;
     }
-    if(rc != NGX_DONE) return rc;
+    if(rc != NGX_DONE) return closeDirectory(conConf, dir, CLOSE_DIRECTORY_ERROR);
     logHttpDebugMsg0(conConf->log, "autols: Done iterating files");
 
     return NGX_OK;
