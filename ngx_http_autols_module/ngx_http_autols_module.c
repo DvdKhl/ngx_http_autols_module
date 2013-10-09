@@ -1,40 +1,40 @@
 #include "ngx_http_autols_module.h"
 
-static void appendConfig(strb_t *strb, conConf_t *conConf) {
-    pattern_t *pattern, *patternLimit;
-    patternToken_t *token, *tokenLimit;
+static void appendConfig(stringBuilder *strb, alsConnectionConfig *conConf) {
+    alsPattern *pattern, *patternLimit;
+    alsPatternToken *token, *tokenLimit;
     int i;
 
     strbFormat(strb, CRLF "locConf->enable = %d" CRLF, conConf->locConf->enable);
     strbFormat(strb, "locConf->createJsVariable = %d" CRLF, conConf->locConf->createJsVariable);
     strbFormat(strb, "locConf->createBody = %d" CRLF, conConf->locConf->createBody);
     strbFormat(strb, "locConf->localTime = %d" CRLF, conConf->locConf->localTime);
-    strbFormat(strb, "locConf->charSet = %V" CRLF, &conConf->locConf->charSet);
-    strbFormat(strb, "locConf->jsSourcePath = %V" CRLF, &conConf->locConf->jsSourcePath);
-    strbFormat(strb, "locConf->cssSourcePath = %V" CRLF, &conConf->locConf->cssSourcePath);
-    strbFormat(strb, "locConf->pagePatternPath = %V" CRLF, &conConf->locConf->pagePatternPath);
+	strbNgxFormat(strb, "locConf->charSet = %V" CRLF, &conConf->locConf->charSet);
+	strbNgxFormat(strb, "locConf->jsSourcePath = %V" CRLF, &conConf->locConf->jsSourcePath);
+	strbNgxFormat(strb, "locConf->cssSourcePath = %V" CRLF, &conConf->locConf->cssSourcePath);
+	strbNgxFormat(strb, "locConf->pagePatternPath = %V" CRLF, &conConf->locConf->pagePatternPath);
 
     //strbFormat(strb, "pattern->content = %s" CRLF, &conConf->pattern->content);
     //strbFormat(strb, "pattern->tokens.nelts = %d" CRLF, conConf->pattern->tokens.nelts);
-    strbFormat(strb, "request->args = %V" CRLF, &conConf->request->args);
-    strbFormat(strb, "request->headers_in.user_agent = %V" CRLF, &conConf->request->headers_in.user_agent->value);
-    strbFormat(strb, "request->requestPath = %V" CRLF, &conConf->requestPath);
+	strbNgxFormat(strb, "request->args = %V" CRLF, &conConf->request->args);
+	strbNgxFormat(strb, "request->headers_in.user_agent = %V" CRLF, &conConf->request->headers_in.user_agent->value);
+	strbNgxFormat(strb, "request->requestPath = %V" CRLF, &conConf->requestPath);
     strbFormat(strb, "request->requestPathCapacity = %d" CRLF, conConf->requestPathCapacity);
-    strbFormat(strb, "request->tplEntryStartPos = %D" CRLF, conConf->tplEntryStartPos);
+    strbFormat(strb, "request->ptnEntryStartPos = %d" CRLF, conConf->ptnEntryStartPos);
 
-    for(i = 0; i < CounterLimit; i++) strbFormat(strb, "%s = %D" CRLF, counterNames[i], counters[i]);
+    for(i = 0; i < CounterLimit; i++) strbFormat(strb, "%s = %d" CRLF, counterNames[i], counters[i]);
 
 
 
-    pattern = (pattern_t*)conConf->mainConf->patterns.elts;
+    pattern = (alsPattern*)conConf->mainConf->patterns.elts;
     patternLimit = pattern + conConf->mainConf->patterns.nelts;
     while(pattern != patternLimit) {
-        strbFormat(strb, "Path=%V ", &pattern->path);
+		strbNgxFormat(strb, "Path=%V ", &pattern->path);
 
-        token = (patternToken_t*)pattern->tokens.elts;
+        token = (alsPatternToken*)pattern->tokens.elts;
         tokenLimit = token + pattern->tokens.nelts;
         while(token != tokenLimit) {
-            strbFormat(strb, "(N=%V, S=%d, E=%d, AC=%d) ", &token->name, token->startAt, token->endAt, token->attributes.nelts);
+			strbNgxFormat(strb, "(N=%V, S=%d, E=%d, AC=%d) ", &token->name, token->startAt, token->endAt, token->attributes.nelts);
             token++;
         }
         strbAppendCString(strb, CRLF);
@@ -44,8 +44,8 @@ static void appendConfig(strb_t *strb, conConf_t *conConf) {
 }
 
 static int ngx_libc_cdecl fileEntryComparer(const void *one, const void *two) {
-    fileEntry_t *first = (fileEntry_t*)one;
-    fileEntry_t *second = (fileEntry_t*)two;
+    alsFileEntry *first = (alsFileEntry*)one;
+    alsFileEntry *second = (alsFileEntry*)two;
 
     if(first->isDirectory && !second->isDirectory) return -1; //move the directories to the start
     if(!first->isDirectory && second->isDirectory) return 1; //move the directories to the start
@@ -73,15 +73,16 @@ static int filterFileExactMatch(ngx_str_t *path, ngx_array_t *filters, ngx_log_t
 }
 static int filterFile(ngx_str_t *path, ngx_array_t *filters, ngx_log_t *log) {
     if(filters == NULL) return 0;
-    if(hasRegex) {
+
+#if USE_REGEX
         return ngx_regex_exec_array(filters, path, log) == NGX_OK;
-    } else {
+#else
         return filterFileExactMatch(path, filters, log);
-    }
+#endif
 }
 
 
-static int appendFileName(conConf_t *conConf, ngx_dir_t *dir, ngx_str_t *dst, size_t *dstCap) {
+static int appendFileName(alsConnectionConfig *conConf, ngx_dir_t *dir, ngx_str_t *dst, size_t *dstCap) {
     size_t fileNameLength;
     u_char *last;
 
@@ -109,18 +110,18 @@ static int appendFileName(conConf_t *conConf, ngx_dir_t *dir, ngx_str_t *dst, si
     return 1;
 }
 
-static int parsePattern(pattern_t *pattern, ngx_pool_t *pool, ngx_log_t *log) {
+static int parsePattern(alsPattern *pattern, ngx_pool_t *pool, ngx_log_t *log) {
     u_char *ptn, *ptnLast, *tokenNameStart, *attributeNameStart, *attributeValueStart;
     size_t tokenNameLength, attributeNameLength, attributeValueLength;
-    patternAttribute_t *attribute;
-    patternToken_t *token;
+    alsPatternAttribute *attribute;
+    alsPatternToken *token;
 
     counters[CounterPatternParse]++;
 
-    if(ngx_array_init(&pattern->tokens, pool, 20, sizeof(patternToken_t)) != NGX_OK) return 0;
+    if(ngx_array_init(&pattern->tokens, pool, 20, sizeof(alsPatternToken)) != NGX_OK) return 0;
 
     //Start Token
-    token = (patternToken_t*)ngx_array_push(&pattern->tokens);
+    token = (alsPatternToken*)ngx_array_push(&pattern->tokens);
     if(token == NULL) return 0;
 
     token->startAt = token->endAt = 0;
@@ -135,7 +136,7 @@ static int parsePattern(pattern_t *pattern, ngx_pool_t *pool, ngx_log_t *log) {
         if(ptn[0] != '&' || ptn[1] != '{') continue;
         logHttpDebugMsg1(log, "autols: #Start of tag found at %d", ptn - pattern->content.data);
 
-        token = (patternToken_t*)ngx_array_push(&pattern->tokens);
+        token = (alsPatternToken*)ngx_array_push(&pattern->tokens);
         if(token == NULL) return 0;
 
         tokenNameStart = (ptn += 2);
@@ -146,7 +147,7 @@ static int parsePattern(pattern_t *pattern, ngx_pool_t *pool, ngx_log_t *log) {
 
         if(tokenNameLength == 0 || ptn >= ptnLast || (*ptn != '}' && *ptn != '?')) return 0;
 
-        if(ngx_array_init(&token->attributes, pool, 2, sizeof(patternAttribute_t)) != NGX_OK) return 0;
+        if(ngx_array_init(&token->attributes, pool, 2, sizeof(alsPatternAttribute)) != NGX_OK) return 0;
 
         while(*ptn == '?' || *ptn == '&') {
             logHttpDebugMsg1(log, "autols: Start of attribute found at %d", ptn - pattern->content.data);
@@ -163,7 +164,7 @@ static int parsePattern(pattern_t *pattern, ngx_pool_t *pool, ngx_log_t *log) {
                 if(attributeValueLength == 0 || ptn >= ptnLast) return 0;
             } else { attributeValueStart = NULL; attributeValueLength = 0; }
 
-            attribute = (patternAttribute_t*)ngx_array_push(&token->attributes);
+            attribute = (alsPatternAttribute*)ngx_array_push(&token->attributes);
             if(attribute == NULL) return 0;
 
             attribute->name.data = attributeNameStart;
@@ -181,7 +182,7 @@ static int parsePattern(pattern_t *pattern, ngx_pool_t *pool, ngx_log_t *log) {
     }
 
     //End Token
-    token = (patternToken_t*)ngx_array_push(&pattern->tokens);
+    token = (alsPatternToken*)ngx_array_push(&pattern->tokens);
     if(token == NULL) return 0;
 
     token->startAt = token->endAt = pattern->content.len;
@@ -193,12 +194,12 @@ static int parsePattern(pattern_t *pattern, ngx_pool_t *pool, ngx_log_t *log) {
     return 1;
 }
 
-static pattern_t* getPattern(conConf_t *conConf) {
-    pattern_t *pattern, *patternLimit;
+static alsPattern* getPattern(alsConnectionConfig *conConf) {
+    alsPattern *pattern, *patternLimit;
 
     if(conConf->mainConf->patterns.nelts == 0) {
         logHttpDebugMsg0(conConf->log, "autols: Parsing default pattern");
-        pattern = (pattern_t*)ngx_array_push(&conConf->mainConf->patterns);
+        pattern = (alsPattern*)ngx_array_push(&conConf->mainConf->patterns);
         pattern->content.data = defaultPagePattern;
         pattern->content.len = ngx_strlen(defaultPagePattern);
         pattern->path.data = NULL;
@@ -207,7 +208,7 @@ static pattern_t* getPattern(conConf_t *conConf) {
         return pattern;
     }
 
-    pattern = (pattern_t*)conConf->mainConf->patterns.elts;
+    pattern = (alsPattern*)conConf->mainConf->patterns.elts;
     patternLimit = pattern + conConf->mainConf->patterns.nelts;
     while(pattern != patternLimit) {
         if(ngx_str_compare(&conConf->locConf->pagePatternPath, &pattern->path)) return pattern;
@@ -220,17 +221,17 @@ static pattern_t* getPattern(conConf_t *conConf) {
     return NULL;
 }
 
-static int appendTokenValue(patternToken_t *token, strb_t *strb, conConf_t *conConf, fileEntry_t *fileEntry) {
-    static strb_t strbA, strbB;
-    static ngx_pool_t *pool;
+static int appendTokenValue(alsPatternToken *token, stringBuilder *strb, alsConnectionConfig *conConf, alsFileEntry *fileEntry) {
+	static stringBuilder strbA, strbB;
 
-    patternAttribute_t *attribute, *attributeLimit;
-    strb_t *curStrb, *prevStrb, *tmpStrb;
+    alsPatternAttribute *attribute, *attributeLimit;
+	stringBuilder *curStrb, *prevStrb, *tmpStrb;
 
     //Cannot use conConf->pool if the instance is used for more than one connection
-    if(pool == NULL && (pool = ngx_create_pool(8 * 512, conConf->log)) == NULL) return 0;
-    if(!strbA.isInitialized && !strbInit(&strbA, pool, 8 * 256, 8 * 256)) return 0;
-    if(!strbB.isInitialized && !strbInit(&strbB, pool, 8 * 256, 8 * 256)) return 0;
+	if(!strbA.isInitialized) {
+		if(!strbDefaultInit(&strbA, 1024, 1024)) return 0;
+		if(!strbDefaultInit(&strbB, 1024, 1024)) return 0;
+	}
 
     if(token->attributes.nelts == 0) {
         curStrb = strb;
@@ -246,68 +247,68 @@ static int appendTokenValue(patternToken_t *token, strb_t *strb, conConf_t *conC
     logHttpDebugMsg1(conConf->log, "autols: Appending TokenValue of \"%V\"", &token->name);
 
     if(fileEntry != NULL) {
-        if(ngx_str_compare(&token->name, &tplEntryIsDirectoryStr)) {
+        if(ngx_str_compare(&token->name, &ptnEntryIsDirectoryStr)) {
             if(!strbAppendSingle(curStrb, fileEntry->isDirectory ? '1' : '0')) return 0;
 
-        } else if(ngx_str_compare(&token->name, &tplEntryModifiedOnStr)) {
+        } else if(ngx_str_compare(&token->name, &ptnEntryModifiedOnStr)) {
             ngx_tm_t tm = fileEntry->modifiedOn;
             if(!strbFormat(curStrb, "%02d-%02d-%d %02d:%02d",
                 tm.ngx_tm_mday, tm.ngx_tm_mon, tm.ngx_tm_year,
                 tm.ngx_tm_hour, tm.ngx_tm_min)) return 0;
 
-        } else if(ngx_str_compare(&token->name, &tplEntrySizeStr)) {
+        } else if(ngx_str_compare(&token->name, &ptnEntrySizeStr)) {
             if(!strbFormat(curStrb, "%O", fileEntry->size)) return 0;
 
-        } else if(ngx_str_compare(&token->name, &tplEntryNameStr)) {
+        } else if(ngx_str_compare(&token->name, &ptnEntryNameStr)) {
             if(!strbAppendNgxString(curStrb, &fileEntry->name)) return 0;
             if(fileEntry->isDirectory && !strbAppendSingle(curStrb, '/')) return 0;
         }
     }
 
-    if(ngx_str_compare(&token->name, &tplReplyCharSetStr)) {
+    if(ngx_str_compare(&token->name, &ptnReplyCharSetStr)) {
         if(!strbAppendNgxString(curStrb, &conConf->locConf->charSet)) return 0;
 
-    } else if(ngx_str_compare(&token->name, &tplRequestUriStr)) {
+    } else if(ngx_str_compare(&token->name, &ptnRequestUriStr)) {
         if(!strbAppendNgxString(curStrb, &conConf->requestPath)) return 0;
     }
 
     if(token->attributes.nelts != 0) { curStrb = &strbB; prevStrb = &strbA; }
-    attribute = (patternAttribute_t*)token->attributes.elts;
+    attribute = (alsPatternAttribute*)token->attributes.elts;
     attributeLimit = attribute + token->attributes.nelts;
     while(attribute != attributeLimit) {
         logHttpDebugMsg1(conConf->log, "autols: Processing attribute \"%V\"", &attribute->name);
 
-        if(ngx_str_compare(&attribute->name, &tplAttStartAtStr)) {
+        if(ngx_str_compare(&attribute->name, &ptnAttStartAtStr)) {
             int32_t toPad = ngx_atoi(attribute->value.data, attribute->value.len);
-            toPad = ngx_max(0, toPad - (strb->size - conConf->tplEntryStartPos));
+            toPad = ngx_max(0, toPad - (strb->size - conConf->ptnEntryStartPos));
 
             if(fileEntry == NULL) return 0;
             if(!strbAppendRepeat(curStrb, ' ', toPad)) return 0;
             if(!strbAppendStrb(curStrb, prevStrb)) return 0;
 
-        } else if(ngx_str_compare(&attribute->name, &tplAttNoCountStr)) {
-            conConf->tplEntryStartPos += prevStrb->size;
+        } else if(ngx_str_compare(&attribute->name, &ptnAttNoCountStr)) {
+            conConf->ptnEntryStartPos += prevStrb->size;
 
-        } else if(ngx_str_compare(&attribute->name, &tplAttMaxLengthStr)) {
+        } else if(ngx_str_compare(&attribute->name, &ptnAttMaxLengthStr)) {
             int32_t maxLength = ngx_atoi(attribute->value.data, attribute->value.len);
             if(maxLength < prevStrb->size) {
                 strbSetSize(prevStrb, maxLength - 3);
                 strbAppendCString(prevStrb, "...");
             }
 
-        } else if(ngx_str_compare(&attribute->name, &tplAttFormatStr)) {
+        } else if(ngx_str_compare(&attribute->name, &ptnAttFormatStr)) {
             //Points to the template data so there is always enough space to add a null termination
             u_char oldChar = *(attribute->value.data + attribute->value.len); //TODO: Make less hacky
             *(attribute->value.data + attribute->value.len) = '\0';
             if(!strbTransformStrb(curStrb, prevStrb, strbTransFormat, attribute->value.data)) return 0;
             *(attribute->value.data + attribute->value.len) = oldChar;
 
-        } else if(ngx_str_compare(&attribute->name, &tplAttEscapeStr)) {
-            if(ngx_str_compare(&attribute->value, &tplAttUriComponentStr)) {
+        } else if(ngx_str_compare(&attribute->name, &ptnAttEscapeStr)) {
+            if(ngx_str_compare(&attribute->value, &ptnAttUriComponentStr)) {
                 if(!strbTransformStrb(curStrb, prevStrb, strbTransEscapeUri, NGX_ESCAPE_URI_COMPONENT)) return 0;
-            } else if(ngx_str_compare(&attribute->value, &tplAttUriStr)) {
+            } else if(ngx_str_compare(&attribute->value, &ptnAttUriStr)) {
                 if(!strbTransformStrb(curStrb, prevStrb, strbTransEscapeUri, NGX_ESCAPE_URI)) return 0;
-            } else if(ngx_str_compare(&attribute->value, &tplAttHttpStr)) {
+            } else if(ngx_str_compare(&attribute->value, &ptnAttHttpStr)) {
                 if(!strbTransformStrb(curStrb, prevStrb, strbTransEscapeHtml)) return 0;
             } else return 0;
         }
@@ -325,9 +326,9 @@ static int appendTokenValue(patternToken_t *token, strb_t *strb, conConf_t *conC
     return 1;
 }
 
-static patternToken_t* appendSection(patternToken_t *token, strb_t *strb, u_char *ptn, ngx_str_t *endTokenName, conConf_t *conConf, fileEntriesInfo_T *fileEntriesInfo) {
-    patternToken_t *nextToken, *entryStartToken;
-    fileEntry_t *fileEntry, *lastFileEntry;
+static alsPatternToken* appendSection(alsPatternToken *token, stringBuilder *strb, char *ptn, ngx_str_t *endTokenName, alsConnectionConfig *conConf, alsFileEntriesInfo *fileEntriesInfo) {
+    alsPatternToken *nextToken, *entryStartToken;
+    alsFileEntry *fileEntry, *lastFileEntry;
 
     if(strb == NULL) {
         logHttpDebugMsg0(conConf->log, "autols: Skipping section");
@@ -350,7 +351,7 @@ static patternToken_t* appendSection(patternToken_t *token, strb_t *strb, u_char
         if(!strbAppendMemory(strb, ptn + token->endAt, nextToken->startAt - token->endAt)) return NULL;
 
         if(nextToken->name.data == NULL ||
-            ngx_str_compare(&nextToken->name, &tplEntryStartStr) ||
+            ngx_str_compare(&nextToken->name, &ptnEntryStartStr) ||
             ngx_str_compare(&nextToken->name, endTokenName)) break;
 
         if(!appendTokenValue(nextToken, strb, conConf, NULL)) return NULL;
@@ -367,18 +368,18 @@ static patternToken_t* appendSection(patternToken_t *token, strb_t *strb, u_char
 
     //FileEntries part of section
     entryStartToken = nextToken;
-    fileEntry = (fileEntry_t*)fileEntriesInfo->fileEntries.elts;
+    fileEntry = (alsFileEntry*)fileEntriesInfo->fileEntries.elts;
     lastFileEntry = fileEntry + fileEntriesInfo->fileEntries.nelts;
     while(fileEntry != lastFileEntry) {
         nextToken = entryStartToken;
-        conConf->tplEntryStartPos = strb->size;
-        logHttpDebugMsg2(conConf->log, "autols: Processing file %d: %V", fileEntry - (fileEntry_t*)fileEntriesInfo->fileEntries.elts, &fileEntry->name);
+        conConf->ptnEntryStartPos = strb->size;
+        logHttpDebugMsg2(conConf->log, "autols: Processing file %d: %V", fileEntry - (alsFileEntry*)fileEntriesInfo->fileEntries.elts, &fileEntry->name);
 
         for(;;) {
             token = nextToken++;
             if(!strbAppendMemory(strb, ptn + token->endAt, nextToken->startAt - token->endAt)) return NULL;
 
-            if(nextToken->name.data == NULL || ngx_str_compare(&nextToken->name, &tplEntryEndStr)) break;
+            if(nextToken->name.data == NULL || ngx_str_compare(&nextToken->name, &ptnEntryEndStr)) break;
             if(!appendTokenValue(nextToken, strb, conConf, fileEntry)) return NULL;
         }
         if(nextToken->name.data == NULL) return NULL;
@@ -402,7 +403,7 @@ static patternToken_t* appendSection(patternToken_t *token, strb_t *strb, u_char
 }
 
 
-static ngx_rc_t setRequestPath(conConf_t *conConf) {
+static ngx_rc_t setRequestPath(alsConnectionConfig *conConf) {
     size_t     root;
     u_char    *last;
     ngx_str_t *reqPath;
@@ -418,7 +419,7 @@ static ngx_rc_t setRequestPath(conConf_t *conConf) {
     return NGX_OK;
 }
 
-static ngx_rc_t openDirectory(conConf_t *conConf, ngx_dir_t *dir) {
+static ngx_rc_t openDirectory(alsConnectionConfig *conConf, ngx_dir_t *dir) {
     ngx_rc_t   rc;
     ngx_err_t  err;
     ngx_uint_t level;
@@ -446,7 +447,7 @@ static ngx_rc_t openDirectory(conConf_t *conConf, ngx_dir_t *dir) {
     return NGX_OK;
 }
 
-static ngx_rc_t closeDirectory(conConf_t *conConf, ngx_dir_t *dir, int throwError) {
+static ngx_rc_t closeDirectory(alsConnectionConfig *conConf, ngx_dir_t *dir, int throwError) {
     if(ngx_close_dir(dir) == NGX_ERROR) {
         ngx_log_error(
             NGX_LOG_ALERT, conConf->log, ngx_errno,
@@ -457,7 +458,7 @@ static ngx_rc_t closeDirectory(conConf_t *conConf, ngx_dir_t *dir, int throwErro
     return !throwError ? NGX_OK : (conConf->request->header_sent ? NGX_ERROR : NGX_HTTP_INTERNAL_SERVER_ERROR);
 }
 
-static ngx_rc_t readDirectory(conConf_t *conConf, ngx_dir_t *dir) {
+static ngx_rc_t readDirectory(alsConnectionConfig *conConf, ngx_dir_t *dir) {
     ngx_err_t err;
 
     ngx_set_errno(0);
@@ -477,7 +478,7 @@ static ngx_rc_t readDirectory(conConf_t *conConf, ngx_dir_t *dir) {
     return NGX_AGAIN;
 }
 
-static ngx_rc_t checkFSEntry(conConf_t *conConf, ngx_dir_t *dir, u_char *filePath) {
+static ngx_rc_t checkFSEntry(alsConnectionConfig *conConf, ngx_dir_t *dir, u_char *filePath) {
     ngx_err_t err;
 
     if(dir->valid_info) return NGX_OK;
@@ -505,7 +506,7 @@ static ngx_rc_t checkFSEntry(conConf_t *conConf, ngx_dir_t *dir, u_char *filePat
     return NGX_OK;
 }
 
-static ngx_rc_t sendHeaders(conConf_t *conConf, ngx_dir_t *dir) {
+static ngx_rc_t sendHeaders(alsConnectionConfig *conConf, ngx_dir_t *dir) {
     ngx_rc_t rc;
 
     conConf->request->headers_out.status = NGX_HTTP_OK;
@@ -526,11 +527,11 @@ static ngx_rc_t sendHeaders(conConf_t *conConf, ngx_dir_t *dir) {
     return NGX_OK;
 }
 
-static ngx_rc_t getFiles(conConf_t *conConf, ngx_dir_t *dir, fileEntriesInfo_T *fileEntriesInfo) {
+static ngx_rc_t getFiles(alsConnectionConfig *conConf, ngx_dir_t *dir, alsFileEntriesInfo *fileEntriesInfo) {
     size_t       filePathCapacity;
     ngx_int_t    gmtOffset;
     ngx_str_t    filePath;
-    fileEntry_t *entry;
+    alsFileEntry *entry;
     ngx_rc_t rc;
 
     gmtOffset = (ngx_timeofday())->gmtoff * 60;
@@ -563,8 +564,8 @@ static ngx_rc_t getFiles(conConf_t *conConf, ngx_dir_t *dir, fileEntriesInfo_T *
         //Filter files specified in config
         if(filterFile(&filePath, conConf->locConf->entryIgnores, conConf->log)) continue;
 
-        logHttpDebugMsg1(conConf->log, "autols: Populating fileEntry_t (Index=%d)", fileEntriesInfo->fileEntries.nelts);
-        entry = (fileEntry_t*)ngx_array_push(&fileEntriesInfo->fileEntries);
+        logHttpDebugMsg1(conConf->log, "autols: Populating alsFileEntry (Index=%d)", fileEntriesInfo->fileEntries.nelts);
+        entry = (alsFileEntry*)ngx_array_push(&fileEntriesInfo->fileEntries);
         if(entry == NULL) return closeDirectory(conConf, dir, CLOSE_DIRECTORY_ERROR);
 
         entry->name.len = filePath.len - conConf->requestPath.len;
@@ -592,19 +593,19 @@ static ngx_rc_t getFiles(conConf_t *conConf, ngx_dir_t *dir, fileEntriesInfo_T *
     return NGX_OK;
 }
 
-static ngx_rc_t createReplyBody(conConf_t *conConf, fileEntriesInfo_T *fileEntriesInfo, ngx_chain_t *out) {
-    patternToken_t *token, *nextToken;
+static ngx_rc_t createReplyBody(alsConnectionConfig *conConf, alsFileEntriesInfo *fileEntriesInfo, ngx_chain_t **out) {
+    alsPatternToken *token, *nextToken;
     ngx_array_t *tokens;
-    pattern_t *pattern;
+    alsPattern *pattern;
+	stringBuilder strb;
     size_t bufSize;
     int doAppend;
-    strb_t strb;
-    u_char *tpl;
+    char *ptn;
 
     pattern = getPattern(conConf);
     if(pattern == NULL) return NGX_ERROR;
 
-    tpl = pattern->content.data;
+    ptn = (char*)pattern->content.data;
 
     bufSize =
         pattern->content.len +
@@ -615,35 +616,35 @@ static ngx_rc_t createReplyBody(conConf_t *conConf, fileEntriesInfo_T *fileEntri
 
     logHttpDebugMsg1(conConf->log, "autols: Estimated buffer size: %d", bufSize);
 
-    //if(!strbInit(&strb, conConf->pool, bufSize, bufSize)) return NGX_ERROR;
-    if(!strbInit(&strb, conConf->request->pool, bufSize, bufSize)) return NGX_ERROR;
+    if(!strbDefaultInit(&strb, bufSize, bufSize)) return NGX_ERROR;
+
     appendConfig(&strb, conConf);
 
     tokens = &pattern->tokens;
-    token = (patternToken_t*)tokens->elts;
+    token = (alsPatternToken*)tokens->elts;
     nextToken = token;
 
     logHttpDebugMsg0(conConf->log, "autols: ##Applying template");
     for(;;) {
         token = nextToken++;
         logHttpDebugMsg1(conConf->log, "autols: #Processing Token: %V", &nextToken->name);
-        if(!strbAppendMemory(&strb, tpl + token->endAt, nextToken->startAt - token->endAt)) return NGX_ERROR;
+        if(!strbAppendMemory(&strb, ptn + token->endAt, nextToken->startAt - token->endAt)) return NGX_ERROR;
 
-        if(ngx_str_compare(&nextToken->name, &tplJsVariableStartStr)) {
+        if(ngx_str_compare(&nextToken->name, &ptnJsVariableStartStr)) {
             doAppend = conConf->locConf->createJsVariable;
-            nextToken = appendSection(nextToken, (doAppend ? &strb : NULL), tpl, &tplJsVariableEndStr, conConf, fileEntriesInfo);
+            nextToken = appendSection(nextToken, (doAppend ? &strb : NULL), ptn, &ptnJsVariableEndStr, conConf, fileEntriesInfo);
 
-        } else if(ngx_str_compare(&nextToken->name, &tplJsSourceStartStr)) {
+        } else if(ngx_str_compare(&nextToken->name, &ptnJsSourceStartStr)) {
             doAppend = conConf->locConf->jsSourcePath.len != 0;
-            nextToken = appendSection(nextToken, (doAppend ? &strb : NULL), tpl, &tplJsSourceEndStr, conConf, fileEntriesInfo);
+            nextToken = appendSection(nextToken, (doAppend ? &strb : NULL), ptn, &ptnJsSourceEndStr, conConf, fileEntriesInfo);
 
-        } else if(ngx_str_compare(&nextToken->name, &tplCssSourceStartStr)) {
+        } else if(ngx_str_compare(&nextToken->name, &ptnCssSourceStartStr)) {
             doAppend = conConf->locConf->cssSourcePath.len != 0;
-            nextToken = appendSection(nextToken, (doAppend ? &strb : NULL), tpl, &tplCssSourceEndStr, conConf, fileEntriesInfo);
+            nextToken = appendSection(nextToken, (doAppend ? &strb : NULL), ptn, &ptnCssSourceEndStr, conConf, fileEntriesInfo);
 
-        } else if(ngx_str_compare(&nextToken->name, &tplBodyStartStr)) {
+        } else if(ngx_str_compare(&nextToken->name, &ptnBodyStartStr)) {
             doAppend = conConf->locConf->createBody;
-            nextToken = appendSection(nextToken, (doAppend ? &strb : NULL), tpl, &tplBodyEndStr, conConf, fileEntriesInfo);
+            nextToken = appendSection(nextToken, (doAppend ? &strb : NULL), ptn, &ptnBodyEndStr, conConf, fileEntriesInfo);
 
         } else if(nextToken->name.data != NULL) {
             if(!appendTokenValue(nextToken, &strb, conConf, NULL)) return NGX_ERROR;
@@ -654,30 +655,33 @@ static ngx_rc_t createReplyBody(conConf_t *conConf, fileEntriesInfo_T *fileEntri
     }
     logHttpDebugMsg0(conConf->log, "autols: Reply body generated");
 
-    if(conConf->request == conConf->request->main) {
-        logHttpDebugMsg0(conConf->log, "autols: strb.lastLink->buf->last_buf = 1");
-        strb.lastLink->buf->last_buf = 1;
-    }
-
-    logHttpDebugMsg1(conConf->log, "autols: strb.lastLink->buf->last_in_chain = %D", strb.lastLink->buf->last_in_chain);
-    logHttpDebugMsg1(conConf->log, "autols: strb.startLink->next = %d", strb.startLink->next);
-
     //appendConfig(&strb, conConf);
 
-    *out = *strb.startLink;
-    return NGX_OK;
+	*out = ngx_alloc_chain_link(conConf->request->connection->pool);
+	(*out)->buf = ngx_create_temp_buf(conConf->request->connection->pool, strb.size);
+
+	if(!strbToCString(&strb, (char*)(*out)->buf->last)) return 0;
+	strbDispose(&strb);
+
+	(*out)->buf->last += strb.size;
+	(*out)->buf->last_in_chain = 1;
+
+    if(conConf->request == conConf->request->main) {
+        logHttpDebugMsg0(conConf->log, "autols: strb.lastLink->buf->last_buf = 1");
+        (*out)->buf->last_buf = 1; //TODO
+    }
+
+	return NGX_OK;
 }
 
 
-static ngx_rc_t ngx_http_autols_handler(ngx_http_request_t *r) {
-    fileEntriesInfo_T fileEntriesInfo;
-    conConf_t  conConf;
-    ngx_chain_t       out;
+ngx_rc_t ngx_http_autols_handler(ngx_http_request_t *r) {
+    alsFileEntriesInfo fileEntriesInfo;
+    alsConnectionConfig  conConf;
     ngx_dir_t         dir;
     ngx_rc_t          rc;
 
     counters[CounterHandlerInvoke]++;
-    connLog = r->connection->log;
 
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "autols: Invoked");
     if(r->uri.data[r->uri.len - 1] != '/') return NGX_DECLINED;
@@ -709,9 +713,9 @@ static ngx_rc_t ngx_http_autols_handler(ngx_http_request_t *r) {
     if(rc != NGX_OK) return rc;
 
     //Create local pool and initialize file entries array
-    conConf.pool = ngx_create_pool((sizeof(fileEntry_t) + 20) * 400, conConf.log); //TODO: Constant
+    conConf.pool = ngx_create_pool((sizeof(alsFileEntry) + 20) * 400, conConf.log); //TODO: Constant
 
-    if(ngx_array_init(&fileEntriesInfo.fileEntries, conConf.pool, 40, sizeof(fileEntry_t)) != NGX_OK) {
+    if(ngx_array_init(&fileEntriesInfo.fileEntries, conConf.pool, 40, sizeof(alsFileEntry)) != NGX_OK) {
         return closeDirectory(&conConf, &dir, CLOSE_DIRECTORY_ERROR);
     }
 
@@ -728,21 +732,21 @@ static ngx_rc_t ngx_http_autols_handler(ngx_http_request_t *r) {
         logHttpDebugMsg1(conConf.log, "autols: Sorting %d file entries", fileEntriesInfo.fileEntries.nelts);
         ngx_qsort(fileEntriesInfo.fileEntries.elts,
             (size_t)fileEntriesInfo.fileEntries.nelts,
-            sizeof(fileEntry_t), fileEntryComparer);
+            sizeof(alsFileEntry), fileEntryComparer);
     }
 
     //Create Reply Body
-    out.buf = NULL; out.next = NULL;
+	ngx_chain_t *out;
     rc = createReplyBody(&conConf, &fileEntriesInfo, &out);
     if(rc != NGX_OK) return rc;
 
-    rc = ngx_http_output_filter(r, &out);
+    rc = ngx_http_output_filter(r, out);
     ngx_destroy_pool(conConf.pool);
 
     return rc;
 }
 
-static void* ngx_http_autols_create_main_conf(ngx_conf_t *cf) {
+void* ngx_http_autols_create_main_conf(ngx_conf_t *cf) {
     ngx_http_autols_main_conf_t *conf;
     conf = (ngx_http_autols_main_conf_t*)ngx_pcalloc(cf->pool, sizeof(ngx_http_autols_main_conf_t));
     if(conf == NULL) return NULL;
@@ -750,17 +754,17 @@ static void* ngx_http_autols_create_main_conf(ngx_conf_t *cf) {
     counters[CounterMainCreateCall]++;
     return conf;
 }
-static char* ngx_http_autols_init_main_conf(ngx_conf_t *cf, void *conf) {
+char* ngx_http_autols_init_main_conf(ngx_conf_t *cf, void *conf) {
     ngx_http_autols_main_conf_t *mainConf = (ngx_http_autols_main_conf_t*)conf;
     mainConf->pool = ngx_create_pool(1024 * 1024, cf->log); //TODO: Shared memory
 
-    ngx_array_init(&mainConf->patterns, mainConf->pool, 2, sizeof(pattern_t));
+    ngx_array_init(&mainConf->patterns, mainConf->pool, 2, sizeof(alsPattern));
 
     counters[CounterMainMergeCall]++; 
     return NGX_CONF_OK;
 }
 
-static void* ngx_http_autols_create_loc_conf(ngx_conf_t *cf) {
+void* ngx_http_autols_create_loc_conf(ngx_conf_t *cf) {
     ngx_http_autols_loc_conf_t  *conf;
     conf = (ngx_http_autols_loc_conf_t*)ngx_pcalloc(cf->pool, sizeof(ngx_http_autols_loc_conf_t));
     if(conf == NULL) return NULL;
@@ -774,7 +778,7 @@ static void* ngx_http_autols_create_loc_conf(ngx_conf_t *cf) {
     counters[CounterLocCreateCall]++;
     return conf;
 }
-static char* ngx_http_autols_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child) {
+char* ngx_http_autols_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child) {
     ngx_http_autols_loc_conf_t *prev = (ngx_http_autols_loc_conf_t*)parent;
     ngx_http_autols_loc_conf_t *conf = (ngx_http_autols_loc_conf_t*)child;
 
@@ -793,7 +797,7 @@ static char* ngx_http_autols_merge_loc_conf(ngx_conf_t *cf, void *parent, void *
     return NGX_CONF_OK;
 }
 
-static ngx_rc_t ngx_http_autols_init(ngx_conf_t *cf) {
+ngx_rc_t ngx_http_autols_init(ngx_conf_t *cf) {
     ngx_http_handler_pt        *h;
     ngx_http_core_main_conf_t  *cmcf;
 
@@ -807,8 +811,8 @@ static ngx_rc_t ngx_http_autols_init(ngx_conf_t *cf) {
     return NGX_OK;
 }
 
-
-static char* ngx_conf_autols_regex_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
+#if USE_REGEX
+char* ngx_conf_autols_regex_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
     u_char regexCompileErrorMsg[NGX_MAX_CONF_ERRSTR];
     ngx_str_t *regexPattern, *regexPatternLast;
     ngx_regex_compile_t regexCompile;
@@ -845,11 +849,16 @@ static char* ngx_conf_autols_regex_array_slot(ngx_conf_t *cf, ngx_command_t *cmd
 
     return NGX_CONF_OK;
 }
+#endif
 
-static char* ngx_conf_autols_regex_then_string_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
-    if(hasRegex) {
+char* ngx_conf_autols_regex_then_string_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
+#if USE_REGEX
         return ngx_conf_autols_regex_array_slot(cf, cmd, conf);
-    } else {
+#else
         return ngx_conf_set_str_array_slot(cf, cmd, conf);
-    }
+#endif
 }
+
+
+
+
