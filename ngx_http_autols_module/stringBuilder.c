@@ -6,8 +6,9 @@
 int32_t stringBuilderAppendChainLinksCalloc(stringBuilder *strb, int32_t count, int32_t size) {
 	stringBuilderChainLink *prevLink, *link, *firstLink;
 
+	int32_t i;
 	prevLink = link = firstLink = NULL;
-	for(int32_t i = 0; i < count; i++) {
+	for(i = 0; i < count; i++) {
 		void *block = calloc(size + sizeof(stringBuilderChainLink), sizeof(char));
 
 		link = (stringBuilderChainLink*)block;
@@ -207,7 +208,7 @@ int32_t strbCompact(stringBuilder *strb) {
 
 int32_t strbTrim(stringBuilder *strb/*, int32_t doInfixTrim*/) {
 	int32_t reclaimedSpace = 0;
-	stringBuilderChainLink **chain = &strb->startLink, *toFree, *prevChain = NULL;
+	stringBuilderChainLink **chain = &strb->startLink, *toFree;
 
 	if(strb->startLink == strb->endLink) return 1;
 
@@ -223,7 +224,6 @@ int32_t strbTrim(stringBuilder *strb/*, int32_t doInfixTrim*/) {
 			return 0;
 		}
 
-		prevChain = *chain;
 		chain = &(*chain)->next;
 	}
 
@@ -463,8 +463,9 @@ int32_t strbTransEscapeUri(stringBuilder *strb, char *src, int32_t size, va_list
 }
 
 int32_t strbTransPadLeft(stringBuilder *strb, char *src, int32_t size, va_list args) {
+	char padChar = va_arg(args, int);
 	int32_t toPad = va_arg(args, int32_t);
-	if(!strbAppendRepeat(strb, ' ', max(0, toPad - size))) return 0;
+	if(!strbAppendRepeat(strb, padChar, max(0, toPad - size))) return 0;
 	return strbAppendMemory(strb, src, size);
 }
 

@@ -2,6 +2,40 @@
 
 static ngx_log_t *connLog;
 
+static const char *counterNames[] = {
+	"MainMergeCall", "SrvMergeCall", "LocMergeCall",
+	"MainCreateCall", "SrvCreateCall", "LocCreateCall",
+	"HandlerInvoke", "TemplateParse", "FileCount"
+};
+static int counters[CounterLimit];
+
+static char defaultPagePattern[] =
+"<!DOCTYPE html>" CRLF
+"<html>" CRLF
+"  <head>" CRLF
+"    <meta charset=\"<!--[ReplyCharSet]-->\">" CRLF
+"    <title><!--[RequestUri]--> (AutoLS)</title><!--{JSVariable}-->" CRLF
+"    <script type=\"text/javascript\">" CRLF
+"      var dirListing = [<!--{EntryLoop}-->" CRLF
+"        {" CRLF
+"          \"isDirectory\": <!--[EntryIsDirectory]-->," CRLF
+"          \"modifiedOn\": \"<!--[EntryModifiedOn]-->\"," CRLF
+"          \"size\": <!--[EntrySize]-->," CRLF
+"          \"name\": \"<!--[EntryName]-->\"" CRLF
+"        },<!--{/EntryLoop}-->" CRLF
+"      ];" CRLF
+"    </script><!--{/JSVariable}--><!--{JSSource}-->" CRLF
+"    <script type=\"text/javascript\" src=\"<!--[JSSource]-->\"></script><!--{/JSSource}--><!--{CSSSource}-->" CRLF
+"    <link rel=\"stylesheet\" type=\"text/css\" href=\"<!--[CSSSource]-->\"><!--{/CSSSource}-->" CRLF
+"  </head>" CRLF
+"  <body bgcolor=\"white\"><!--{Body}-->" CRLF
+"    <h1>Index of <!--[RequestUri]--></h1>" CRLF
+"    <hr>" CRLF
+"    <pre><!--{EntryLoop}--><a href=\"<!--[EntryName?Escape=Uri&NoCount]-->\"><!--[EntryName?MaxLength=66]--></a><!--[EntryModifiedOn?StartAt=82]--> <!--[EntrySize?Format=%24s]-->\r\n<!--{/EntryLoop}--></pre><!--{/Body}-->" CRLF
+"  </body>" CRLF
+"</html>";
+
+
 static void appendConfigPattern(stringBuilder *strb, alsPattern *pattern, ngx_array_t *tokens, int depth) {
 	alsPatternToken *token = (alsPatternToken*)tokens->elts;
 	alsPatternToken *tokenLimit = token + tokens->nelts;
@@ -15,8 +49,8 @@ static void appendConfigPattern(stringBuilder *strb, alsPattern *pattern, ngx_ar
 }
 static void appendConfig(stringBuilder *strb, alsConnectionConfig *conConf) {
 	alsPattern *pattern, *patternLimit;
-	alsPatternToken *token, *tokenLimit;
-	int i;
+
+	strbAppendCString(strb, "<pre>");
 
 	strbFormat(strb, CRLF "locConf->enable = %d" CRLF, conConf->locConf->enable);
 	strbFormat(strb, "locConf->localTime = %d" CRLF, conConf->locConf->localTime);
@@ -29,9 +63,8 @@ static void appendConfig(stringBuilder *strb, alsConnectionConfig *conConf) {
 	strbFormat(strb, "request->requestPathCapacity = %d" CRLF, conConf->requestPathCapacity);
 	strbFormat(strb, "request->ptnEntryStartPos = %d" CRLF, conConf->ptnEntryStartPos);
 
+	int i;
 	for(i = 0; i < CounterLimit; i++) strbFormat(strb, "%s = %d" CRLF, counterNames[i], counters[i]);
-
-
 
 	pattern = (alsPattern*)conConf->mainConf->patterns.elts;
 	patternLimit = pattern + conConf->mainConf->patterns.nelts;
@@ -41,7 +74,7 @@ static void appendConfig(stringBuilder *strb, alsConnectionConfig *conConf) {
 		strbAppendCString(strb, CRLF);
 		pattern++;
 	}
-	strbAppendCString(strb, CRLF CRLF);
+	strbAppendCString(strb, "</pre>" CRLF CRLF);
 }
 
 static int ngx_libc_cdecl fileEntryComparer(const void *one, const void *two) {
@@ -54,7 +87,7 @@ static int ngx_libc_cdecl fileEntryComparer(const void *one, const void *two) {
 	return (int)ngx_strcmp(first->name.data, second->name.data);
 }
 static int ngx_libc_cdecl stringLenComparer(u_char *one, size_t oneLen, u_char *two, size_t twoLen) {
-	size_t n = min(oneLen, twoLen);
+	size_t n = ngx_min(oneLen, twoLen);
 	while(n-- != 0) if(one[n] != one[n]) return one[n] - one[n];
 	return oneLen - twoLen;
 }
@@ -63,9 +96,9 @@ static int ngx_libc_cdecl ngxStringComparer(const void *one, const void *two) {
 	ngx_str_t *second = (ngx_str_t*)two;
 	return stringLenComparer(first->data, first->len, second->data, second->len);
 }
-static int ngx_libc_cdecl ngxKeyValElemComparer(const void *one, const void *two) {
-	return ngxStringComparer(&((ngx_keyval_t*)one)->key, &((ngx_keyval_t*)two)->key);
-}
+//static int ngx_libc_cdecl ngxKeyValElemComparer(const void *one, const void *two) {
+//	return ngxStringComparer(&((ngx_keyval_t*)one)->key, &((ngx_keyval_t*)two)->key);
+//}
 static int ngx_libc_cdecl ngxKeyValKeyComparer(const void *one, const void *two) {
 	return ngxStringComparer((ngx_str_t*)one, &((ngx_keyval_t*)two)->key);
 }
@@ -98,6 +131,7 @@ static int appendFileName(alsConnectionConfig *conConf, ngx_dir_t *dir, ngx_str_
 	return 1;
 }
 
+#if !USE_REGEX
 static int filterFileExactMatch(ngx_str_t *path, ngx_array_t *filters, ngx_log_t *log) {
 	ngx_str_t *filter, *filterLast;
 	int hasMatch = 0;
@@ -115,6 +149,8 @@ static int filterFileExactMatch(ngx_str_t *path, ngx_array_t *filters, ngx_log_t
 
 	return hasMatch;
 }
+#endif
+
 static int filterFile(ngx_str_t *path, ngx_array_t *filters, ngx_log_t *log) {
 	if(filters == NULL) return 0;
 
@@ -267,11 +303,8 @@ static int applyPatternProcessAttributes(stringBuilder *strbValue, ngx_array_t *
 
 		if(ngx_cstr_compare(&attribute->name, "StartAt")) {
 			int32_t toPad = ngx_atoi(attribute->value.data, attribute->value.len);
-			if(!strbTransform(strbValue, strbTransPadLeft, toPad)) return 0;
-
-			//toPad = ngx_max(0, toPad - (strbSize - conConf->ptnEntryStartPos));
-			//if(!strbAppendRepeat(strbValue, ' ', toPad)) return 0;
-			//if(!strbAppendStrb(strbValue, strbValue)) return 0;
+			toPad = ngx_max(0, toPad - (strbSize - conConf->ptnEntryStartPos));
+			if(!strbTransform(strbValue, strbTransPadLeft, ' ', toPad + strbValue->size)) return 0;
 
 		} else if(ngx_cstr_compare(&attribute->name, "NoCount")) {
 			conConf->ptnEntryStartPos += strbValue->size;
@@ -302,6 +335,7 @@ static int applyPatternProcessAttributes(stringBuilder *strbValue, ngx_array_t *
 		logHttpDebugMsg1(connlog, "autols: Attribute %V processed", &attribute->name);
 		attribute++;
 	}
+	return 1;
 }
 static int applyPatternAppendToken(stringBuilder *strb, alsPatternToken *token, alsConnectionConfig *conConf, alsFileEntry *fileEntry) {
 	static stringBuilder strbValue;
@@ -334,7 +368,7 @@ static int applyPatternAppendToken(stringBuilder *strb, alsPatternToken *token, 
 
 	} else //Global Tags
 	if(ngx_cstr_compare(&token->name, "RequestUri")) {
-		if(!strbAppendNgxString(curStrb, &conConf->requestPath)) return 0;
+		if(!strbAppendNgxString(curStrb, &conConf->request->uri)) return 0;
 
 	} else if(conConf->locConf->keyValuePairs) { //Userdefined Tags (nginx config)
 		ngx_keyval_t *kvp = (ngx_keyval_t*)bsearch(&token->name, conConf->locConf->keyValuePairs->elts,
@@ -343,9 +377,10 @@ static int applyPatternAppendToken(stringBuilder *strb, alsPatternToken *token, 
 	}
 
 	if(token->attributes.nelts) {
-		applyPatternProcessAttributes(&strbValue, &token->attributes, conConf, strb->size);
-		strbAppendStrb(strb, &strbValue);
+		if(!applyPatternProcessAttributes(&strbValue, &token->attributes, conConf, strb->size)) return 0;
+		if(!strbAppendStrb(strb, &strbValue)) return 0;
 	}
+	return 1;
 }
 static int applyPatternSectionEnabled(alsConnectionConfig *conConf, ngx_str_t *sectionName) {
 	return 1;
@@ -368,16 +403,17 @@ static int applyPatternSub(stringBuilder *strb, ngx_array_t *tokens, alsConnecti
 			alsFileEntry *fileEntryLimit = fileEntry + fileEntriesInfo->fileEntries.nelts;
 			while(fileEntry != fileEntryLimit) {
 				conConf->ptnEntryStartPos = strb->size;
-				applyPatternSub(strb, &nextToken->children, conConf, fileEntriesInfo, fileEntry++);
+				if(!applyPatternSub(strb, &nextToken->children, conConf, fileEntriesInfo, fileEntry++)) return 0;
 			}
 
 		} else if(nextToken->children.nelts && applyPatternSectionEnabled(conConf, &nextToken->name)) {
-			applyPatternSub(strb, &nextToken->children, conConf, fileEntriesInfo, NULL);
+			if(!applyPatternSub(strb, &nextToken->children, conConf, fileEntriesInfo, NULL)) return 0;
 
 		} else {
-			applyPatternAppendToken(strb, nextToken, conConf, fileEntry);
+			if(!applyPatternAppendToken(strb, nextToken, conConf, fileEntry)) return 0;
 		}
 	}
+	return 1;
 }
 static int applyPattern(stringBuilder *strb, alsPattern *pattern, alsConnectionConfig *conConf, alsFileEntriesInfo *fileEntriesInfo) {
 	return applyPatternSub(strb, &pattern->tokens, conConf, fileEntriesInfo, NULL);
@@ -572,7 +608,7 @@ static ngx_rc_t createReplyBody(alsConnectionConfig *conConf, alsFileEntriesInfo
 	stringBuilder strb;
 	if(!strbDefaultInit(&strb, bufSize, bufSize)) return NGX_ERROR;
 
-	//appendConfig(&strb, conConf);
+	appendConfig(&strb, conConf);
 
 	if(!applyPattern(&strb, pattern, conConf, fileEntriesInfo)) return NGX_ERROR;
 	logHttpDebugMsg0(connLog, "autols: Reply body generated");

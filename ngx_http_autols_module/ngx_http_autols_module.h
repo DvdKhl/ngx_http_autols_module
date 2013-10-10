@@ -32,43 +32,12 @@
 #define logHttpDebugMsg7(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)       ngx_log_debug7(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 #define logHttpDebugMsg8(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) ngx_log_debug8(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
 
-static char defaultPagePattern[] =
-    "<!DOCTYPE html>" CRLF
-    "<html>" CRLF
-    "  <head>" CRLF
-    "    <meta charset=\"<!--[ReplyCharSet]-->\">" CRLF
-    "    <title>AutoLS: Index of <!--[RequestUri]--></title><!--{JSVariable}-->" CRLF
-    "    <script type=\"text/javascript\">" CRLF
-    "      var dirListing = [<!--{EntryLoop}-->" CRLF
-    "        {" CRLF
-    "          \"isDirectory\": <!--[EntryIsDirectory]-->," CRLF
-    "          \"modifiedOn\": \"<!--[EntryModifiedOn]-->\"," CRLF
-    "          \"size\": <!--[EntrySize]-->," CRLF
-    "          \"name\": \"<!--[EntryName]-->\"" CRLF
-	"        },<!--{/EntryLoop}-->" CRLF
-    "      ];" CRLF
-    "    </script><!--{/JSVariable}--><!--{JSSource}-->" CRLF
-    "    <script type=\"text/javascript\" src=\"<!--[JSSource]-->\"></script><!--{/JSSource}--><!--{CSSSource}-->" CRLF
-    "    <link rel=\"stylesheet\" type=\"text/css\" href=\"<!--[CSSSource]-->\"><!--{/CSSSource}-->" CRLF
-    "  </head>" CRLF
-    "  <body bgcolor=\"white\"><!--{Body}-->" CRLF
-    "    <h1>Index of <!--[RequestUri]--></h1>" CRLF
-    "    <hr>" CRLF
-	"    <pre><!--{EntryLoop}--><a href=\"<!--[EntryName?Escape=Uri&NoCount]-->\"><!--[EntryName?MaxLength=66]--></a><!--[EntryModifiedOn?StartAt=82]--> <!--[EntrySize?Format=%24s]-->\r\n<!--{/EntryLoop}--></pre><!--{/Body}-->" CRLF
-    "  </body>" CRLF
-    "</html>";
 
 enum {
     CounterMainMergeCall, CounterSrvMergeCall, CounterLocMergeCall,
     CounterMainCreateCall, CounterSrvCreateCall, CounterLocCreateCall,
     CounterHandlerInvoke, CounterPatternParse, CounterFileCount, CounterLimit
 };
-static const char *counterNames[] = {
-    "MainMergeCall","SrvMergeCall","LocMergeCall",
-    "MainCreateCall","SrvCreateCall","LocCreateCall",
-    "HandlerInvoke", "TemplateParse", "FileCount"
-};
-static int counters[CounterLimit];
 
 #define ngx_str_compare(a,b) ((a)->len == (b)->len && !ngx_memcmp((a)->data, (b)->data, (a)->len))
 #define ngx_cstr_compare(a,b) ((a)->len == (sizeof(b) - 1) && !ngx_memcmp((a)->data, b, (a)->len))
@@ -144,7 +113,6 @@ typedef struct {
 	int32_t nameLenAsHtml, nameLenAsUri;
 } alsFileEntry;
 
-
-extern ngx_module_t  ngx_http_autols_module;
+extern ngx_module_t ngx_http_autols_module;
 
 #endif
