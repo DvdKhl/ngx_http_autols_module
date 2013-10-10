@@ -32,70 +32,12 @@
 #define logHttpDebugMsg7(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)       ngx_log_debug7(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 #define logHttpDebugMsg8(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) ngx_log_debug8(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
 
-static ngx_str_t ptnReplyCharSetStr = ngx_string("ReplyCharSet");
-static ngx_str_t ptnRequestUriStr = ngx_string("RequestUri");
-
-static ngx_str_t ptnJsVariableStartStr = ngx_string("JSVariableStart");
-static ngx_str_t ptnJsVariableEndStr = ngx_string("JSVariableEnd");
-
-static ngx_str_t ptnJsSourceStartStr = ngx_string("JSSourceStart");
-static ngx_str_t ptnJsSourceEndStr = ngx_string("JSSourceEnd");
-
-static ngx_str_t ptnCssSourceStartStr = ngx_string("CSSSourceStart");
-static ngx_str_t ptnCssSourceEndStr = ngx_string("CSSSourceEnd");
-
-static ngx_str_t ptnBodyStartStr = ngx_string("BodyStart");
-static ngx_str_t ptnBodyEndStr = ngx_string("BodyEnd");
-
-static ngx_str_t ptnEntryStartStr = ngx_string("EntryStart");
-static ngx_str_t ptnEntryIsDirectoryStr = ngx_string("EntryIsDirectory");
-static ngx_str_t ptnEntryModifiedOnStr = ngx_string("EntryModifiedOn");
-static ngx_str_t ptnEntrySizeStr = ngx_string("EntrySize");
-static ngx_str_t ptnEntryNameStr = ngx_string("EntryName");
-static ngx_str_t ptnEntryEndStr = ngx_string("EntryEnd");
-
-
-static ngx_str_t ptnAttNoCountStr = ngx_string("NoCount");
-static ngx_str_t ptnAttStartAtStr = ngx_string("StartAt");
-static ngx_str_t ptnAttEscapeStr = ngx_string("Escape");
-static ngx_str_t ptnAttUriComponentStr = ngx_string("UriComponent");
-static ngx_str_t ptnAttHttpStr = ngx_string("Http");
-static ngx_str_t ptnAttUriStr = ngx_string("Uri");
-static ngx_str_t ptnAttFormatStr = ngx_string("Format");
-static ngx_str_t ptnAttMaxLengthStr = ngx_string("MaxLength");
-
-static u_char defaultPagePattern[] =
-    "<!DOCTYPE html>" CRLF
-    "<html>" CRLF
-    "  <head>" CRLF
-    "    <meta charset=\"&{ReplyCharSet}\">" CRLF
-    "    <title>Index of &{RequestUri}</title>&{JSVariableStart}" CRLF
-    "    <script type=\"text/javascript\">" CRLF
-    "      var dirListing = [&{EntryStart}" CRLF
-    "        {" CRLF
-    "          \"isDirectory\": &{EntryIsDirectory}," CRLF
-    "          \"modifiedOn\": \"&{EntryModifiedOn}\"," CRLF
-    "          \"size\": &{EntrySize}," CRLF
-    "          \"name\": \"&{EntryName}\"" CRLF
-    "        },&{EntryEnd}" CRLF
-    "      ]" CRLF
-    "    </script>&{JSVariableEnd}&{JSSourceStart}" CRLF
-    "    <script type=\"text/javascript\" src=\"&{JSSource}\"></script>&{JSSourceEnd}&{CSSSourceStart}" CRLF
-    "    <link rel=\"stylesheet\" type=\"text/css\" href=\"&{CSSSource}\">&{CSSSourceEnd}" CRLF
-    "  </head>" CRLF
-    "  <body bgcolor=\"white\">&{BodyStart}" CRLF
-    "    <h1>Index of &{RequestUri}</h1>" CRLF
-    "    <hr>" CRLF
-    "    <pre>&{EntryStart}<a href=\"&{EntryName?Escape=Uri&NoCount}\">&{EntryName?MaxLength=66}</a>&{EntryModifiedOn?StartAt=82} &{EntrySize?Format=%24s}&{EntryEnd}</pre>&{BodyEnd}" CRLF
-    "  </body>" CRLF
-    "</html>";
-
-static char defaultPagePattern2[] =
+static char defaultPagePattern[] =
     "<!DOCTYPE html>" CRLF
     "<html>" CRLF
     "  <head>" CRLF
     "    <meta charset=\"<!--[ReplyCharSet]-->\">" CRLF
-    "    <title>Index of <!--[RequestUri]--></title><!--{JSVariable}-->" CRLF
+    "    <title>AutoLS: Index of <!--[RequestUri]--></title><!--{JSVariable}-->" CRLF
     "    <script type=\"text/javascript\">" CRLF
     "      var dirListing = [<!--{EntryLoop}-->" CRLF
     "        {" CRLF
@@ -103,8 +45,8 @@ static char defaultPagePattern2[] =
     "          \"modifiedOn\": \"<!--[EntryModifiedOn]-->\"," CRLF
     "          \"size\": <!--[EntrySize]-->," CRLF
     "          \"name\": \"<!--[EntryName]-->\"" CRLF
-    "        ]-->,<!--{/EntryLoop}-->" CRLF
-    "      ]" CRLF
+	"        },<!--{/EntryLoop}-->" CRLF
+    "      ];" CRLF
     "    </script><!--{/JSVariable}--><!--{JSSource}-->" CRLF
     "    <script type=\"text/javascript\" src=\"<!--[JSSource]-->\"></script><!--{/JSSource}--><!--{CSSSource}-->" CRLF
     "    <link rel=\"stylesheet\" type=\"text/css\" href=\"<!--[CSSSource]-->\"><!--{/CSSSource}-->" CRLF
@@ -112,7 +54,7 @@ static char defaultPagePattern2[] =
     "  <body bgcolor=\"white\"><!--{Body}-->" CRLF
     "    <h1>Index of <!--[RequestUri]--></h1>" CRLF
     "    <hr>" CRLF
-    "    <pre><!--{Entry}--><a href=\"<!--[EntryName?Escape=Uri&NoCount]-->\"><!--[EntryName?MaxLength=66]--></a><!--[EntryModifiedOn?StartAt=82]--> <!--[EntrySize?Format=%24s]--><!--[EntryEnd]--></pre><!--{/Body}-->" CRLF
+	"    <pre><!--{EntryLoop}--><a href=\"<!--[EntryName?Escape=Uri&NoCount]-->\"><!--[EntryName?MaxLength=66]--></a><!--[EntryModifiedOn?StartAt=82]--> <!--[EntrySize?Format=%24s]-->\r\n<!--{/EntryLoop}--></pre><!--{/Body}-->" CRLF
     "  </body>" CRLF
     "</html>";
 
@@ -129,6 +71,7 @@ static const char *counterNames[] = {
 static int counters[CounterLimit];
 
 #define ngx_str_compare(a,b) ((a)->len == (b)->len && !ngx_memcmp((a)->data, (b)->data, (a)->len))
+#define ngx_cstr_compare(a,b) ((a)->len == (sizeof(b) - 1) && !ngx_memcmp((a)->data, b, (a)->len))
 
 typedef ngx_int_t ngx_rc_t;
 ngx_rc_t ngx_http_autols_init(ngx_conf_t *cf);
@@ -145,30 +88,27 @@ char* ngx_conf_autols_regex_then_string_array_slot(ngx_conf_t *cf, ngx_command_t
 
 
 typedef struct {
-    ngx_pool_t *pool;
-
     ngx_array_t patterns;
 } ngx_http_autols_main_conf_t;
 
 typedef struct {
-    ngx_flag_t enable, createJsVariable, createBody, localTime;
-    ngx_str_t charSet, jsSourcePath, cssSourcePath, pagePatternPath;
-    ngx_array_t *entryIgnores;
+    ngx_flag_t enable, localTime;
+    ngx_str_t patternPath;
+    ngx_array_t *entryIgnores, *sections, *keyValuePairs;
 } ngx_http_autols_loc_conf_t;
 
 
 typedef struct { ngx_str_t name, value; } alsPatternAttribute;
 
 typedef struct {
-    ngx_str_t name;
-    size_t startAt, endAt;
-    ngx_array_t attributes;
+	ngx_array_t children, attributes;
+
+	ngx_str_t name;
+	char *start, *end;
 } alsPatternToken;
 
 typedef struct {
-    ngx_str_t path;
-
-    ngx_str_t content;
+	ngx_str_t path, content;
     ngx_array_t tokens;
 } alsPattern;
 
@@ -177,12 +117,9 @@ typedef struct {
     ngx_http_autols_main_conf_t *mainConf;
     ngx_http_autols_loc_conf_t *locConf;
     ngx_http_request_t *request;
-    ngx_pool_t *pool;
-    ngx_log_t *log;
 
     ngx_str_t requestPath;
 	int32_t requestPathCapacity;
-
     int32_t ptnEntryStartPos;
 } alsConnectionConfig;
 

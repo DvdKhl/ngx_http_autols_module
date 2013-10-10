@@ -15,53 +15,11 @@ static ngx_command_t ngx_http_autols_commands[] = {
 	offsetof(ngx_http_autols_loc_conf_t, entryIgnores),
 	NULL},
 
-	{ngx_string("autols_create_js_variable"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_FLAG, //TODO: NGX_CONF_FLAG?
-	ngx_conf_set_flag_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_autols_loc_conf_t, createJsVariable),
-	NULL},
-
-	{ngx_string("autols_create_body"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_FLAG, //TODO: NGX_CONF_FLAG?
-	ngx_conf_set_flag_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_autols_loc_conf_t, createBody),
-	NULL},
-
 	{ngx_string("autols_local_time"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_FLAG, //TODO: NGX_CONF_FLAG?
 	ngx_conf_set_flag_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_autols_loc_conf_t, localTime),
-	NULL},
-
-	{ngx_string("autols_charset"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1, //TODO: NGX_CONF_FLAG?
-	ngx_conf_set_flag_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_autols_loc_conf_t, charSet),
-	NULL},
-
-	{ngx_string("autols_js_source_path"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1, //TODO: NGX_CONF_FLAG?
-	ngx_conf_set_str_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_autols_loc_conf_t, jsSourcePath),
-	NULL},
-
-	{ngx_string("autols_css_source_path"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1, //TODO: NGX_CONF_FLAG?
-	ngx_conf_set_str_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_autols_loc_conf_t, cssSourcePath),
-	NULL},
-
-	{ngx_string("autols_page_template_path"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1, //TODO: NGX_CONF_FLAG?
-	ngx_conf_set_str_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_autols_loc_conf_t, pagePatternPath),
 	NULL},
 
 	ngx_null_command

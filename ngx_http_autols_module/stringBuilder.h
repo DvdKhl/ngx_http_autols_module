@@ -76,7 +76,7 @@ int32_t strbTransform(stringBuilder *strb, strbTransform_fptr strbTransformMetho
 int32_t strbTransFormat(stringBuilder *strb, char *src, int32_t size, va_list args);
 int32_t strbTransEscapeHtml(stringBuilder *strb, char *src, int32_t size, va_list args);
 int32_t strbTransEscapeUri(stringBuilder *strb, char *src, int32_t size, va_list args);
-
+int32_t strbTransPadLeft(stringBuilder *strb, char *src, int32_t size, va_list args);
 
 int32_t stringBuilderAppendChainLinksCalloc(stringBuilder *strb, int32_t count, int32_t size);
 void stringBuilderDisposeChainLinksCalloc(stringBuilder *strb);
