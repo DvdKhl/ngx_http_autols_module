@@ -10,13 +10,10 @@ int32_t stringBuilderAppendChainLinksCalloc(stringBuilder *strb, int32_t count, 
 	prevLink = link = firstLink = NULL;
 	for(i = 0; i < count; i++) {
 		void *block = calloc(size + sizeof(stringBuilderChainLink), sizeof(char));
+		if(block == NULL) return 0;
 
 		link = (stringBuilderChainLink*)block;
-		if(link == NULL) return 0;
-
 		link->start = link->last = (char*)block + sizeof(stringBuilderChainLink);
-		if(link->start == NULL) return 0;
-
 		link->end = link->start + size;
 
 		if(prevLink != NULL) {

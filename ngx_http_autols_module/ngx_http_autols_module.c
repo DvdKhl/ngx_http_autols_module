@@ -1,6 +1,7 @@
 #include "ngx_http_autols_module.h"
 
 static ngx_log_t *alsLog;
+static ngx_tm_t *processHandlerFirstInvokeOn;
 
 static const char *counterNames[] = {
 	"MainMergeCall", "SrvMergeCall", "LocMergeCall",
@@ -35,7 +36,6 @@ static char defaultPagePattern[] =
 "  </body>" CRLF
 "</html>";
 
-
 static void appendConfigPattern(stringBuilder *strb, alsPattern *pattern, ngx_array_t *tokens, int depth) {
 	alsPatternToken *token = (alsPatternToken*)tokens->elts;
 	alsPatternToken *tokenLimit = token + tokens->nelts;
@@ -50,13 +50,18 @@ static void appendConfigPattern(stringBuilder *strb, alsPattern *pattern, ngx_ar
 static void appendConfig(stringBuilder *strb, alsConnectionConfig *conConf) {
 	int i;
 
+	logHttpDebugMsg0(alsLog, "autols: Printing Globals");
 	strbAppendCString(strb, "<pre>#Global" CRLF);
 	strbFormat(strb, "ngx_process = %d" CRLF, ngx_process);
+	ngx_tm_t tm = *processHandlerFirstInvokeOn;
+	strbFormat(strb, "processHandlerFirstInvokeOn = %02d-%02d-%d %02d:%02d" CRLF, tm.ngx_tm_mday, tm.ngx_tm_mon, tm.ngx_tm_year, tm.ngx_tm_hour, tm.ngx_tm_min);
 
+	logHttpDebugMsg0(alsLog, "autols: Printing Main Config");
 	strbAppendCString(strb, CRLF "#Main Config" CRLF);
-	ngx_tm_t tm = conConf->mainConf->createdOn;
+	tm = conConf->mainConf->createdOn;
 	strbFormat(strb, "mainConf->createdOn = %02d-%02d-%d %02d:%02d" CRLF, tm.ngx_tm_mday, tm.ngx_tm_mon, tm.ngx_tm_year, tm.ngx_tm_hour, tm.ngx_tm_min);
 
+	logHttpDebugMsg0(alsLog, "autols: Printing Main Config Patterns");
 	strbAppendCString(strb, "Parsed Patterns:" CRLF);
 	alsPattern *pattern, *patternLimit;
 	pattern = (alsPattern*)conConf->mainConf->patterns.elts;
@@ -68,6 +73,7 @@ static void appendConfig(stringBuilder *strb, alsConnectionConfig *conConf) {
 		pattern++;
 	}
 
+	logHttpDebugMsg0(alsLog, "autols: Printing Location Config");
 	strbAppendCString(strb, "#Location Config" CRLF);
 	tm = conConf->locConf->createdOn;
 	strbFormat(strb, "locConf->createdOn = %02d-%02d-%d %02d:%02d" CRLF, tm.ngx_tm_mday, tm.ngx_tm_mon, tm.ngx_tm_year, tm.ngx_tm_hour, tm.ngx_tm_min);
@@ -76,12 +82,23 @@ static void appendConfig(stringBuilder *strb, alsConnectionConfig *conConf) {
 	strbFormat(strb, "locConf->patternPath = %d" CRLF, conConf->locConf->patternPath);
 	strbAppendCString(strb, "locConf->entryIgnores = {");
 	if(conConf->locConf->entryIgnores && conConf->locConf->entryIgnores->nelts) {
+
+#if USE_REGEX
+		strbAppendCString(strb, (char*)((ngx_regex_elt_t*)conConf->locConf->entryIgnores->elts)->name);
+		for(i = 1; i < (int)conConf->locConf->entryIgnores->nelts; i++) {
+			strbAppendCString(strb, ", ");
+			strbAppendCString(strb, (char*)((ngx_regex_elt_t*)conConf->locConf->entryIgnores->elts + i)->name);
+		}
+#else
 		strbAppendNgxString(strb, (ngx_str_t*)conConf->locConf->entryIgnores->elts);
 		for(i = 1; i < (int)conConf->locConf->entryIgnores->nelts; i++) {
 			strbAppendCString(strb, ", ");
 			strbAppendNgxString(strb, (ngx_str_t*)conConf->locConf->entryIgnores->elts + i);
 		}
+#endif
+
 	}
+
 	strbAppendCString(strb, "}" CRLF);
 
 	strbAppendCString(strb, "locConf->sections = {");
@@ -96,15 +113,16 @@ static void appendConfig(stringBuilder *strb, alsConnectionConfig *conConf) {
 
 	strbAppendCString(strb, "locConf->keyValuePairs = {");
 	if(conConf->locConf->keyValuePairs && conConf->locConf->keyValuePairs->nelts) {
-		ngx_keyval_t *pair = (ngx_keyval_t*)conConf->locConf->sections->elts;
-		strbFormat(strb, "(%V = %V)", &pair->key, &pair->value);
-		for(i = 1; i < (int)conConf->locConf->sections->nelts; i++) {
-			pair = (ngx_keyval_t*)conConf->locConf->sections->elts + i;
-			strbFormat(strb, ", (%V = %V)", &pair->key, &pair->value);
+		ngx_keyval_t *pair = (ngx_keyval_t*)conConf->locConf->keyValuePairs->elts;
+		strbNgxFormat(strb, "(%V = %V)", &pair->key, &pair->value);
+		for(i = 1; i < (int)conConf->locConf->keyValuePairs->nelts; i++) {
+			pair = (ngx_keyval_t*)conConf->locConf->keyValuePairs->elts + i;
+			strbNgxFormat(strb, ", (%V = %V)", &pair->key, &pair->value);
 		}
 	}
 	strbAppendCString(strb, "}" CRLF);
 
+	logHttpDebugMsg0(alsLog, "autols: Printing Connection Config");
 	strbAppendCString(strb, CRLF "#Connection Config" CRLF);
 	strbNgxFormat(strb, "requestPath = %V" CRLF, &conConf->requestPath);
 	strbFormat(strb, "requestPathCapacity = %d" CRLF, conConf->requestPathCapacity);
@@ -112,6 +130,8 @@ static void appendConfig(stringBuilder *strb, alsConnectionConfig *conConf) {
 	strbNgxFormat(strb, "request->args = %V" CRLF, &conConf->request->args);
 	strbNgxFormat(strb, "request->headers_in.user_agent = %V" CRLF, &conConf->request->headers_in.user_agent->value);
 
+	logHttpDebugMsg0(alsLog, "autols: Printing Counters");
+	strbAppendCString(strb, CRLF "#Counters" CRLF);
 	for(i = 0; i < CounterLimit; i++) strbFormat(strb, "%s = %d" CRLF, counterNames[i], counters[i]);
 
 	strbAppendCString(strb, "</pre>" CRLF CRLF);
@@ -136,9 +156,9 @@ static int ngx_libc_cdecl ngxStringComparer(const void *one, const void *two) {
 	ngx_str_t *second = (ngx_str_t*)two;
 	return stringLenComparer(first->data, first->len, second->data, second->len);
 }
-//static int ngx_libc_cdecl ngxKeyValElemComparer(const void *one, const void *two) {
-//	return ngxStringComparer(&((ngx_keyval_t*)one)->key, &((ngx_keyval_t*)two)->key);
-//}
+static int ngx_libc_cdecl ngxKeyValElemComparer(const void *one, const void *two) {
+	return ngxStringComparer(&((ngx_keyval_t*)one)->key, &((ngx_keyval_t*)two)->key);
+}
 static int ngx_libc_cdecl ngxKeyValKeyComparer(const void *one, const void *two) {
 	return ngxStringComparer((ngx_str_t*)one, &((ngx_keyval_t*)two)->key);
 }
@@ -414,7 +434,8 @@ static int applyPatternAppendToken(stringBuilder *strb, alsPatternToken *token, 
 	} else if(conConf->locConf->keyValuePairs) { //Userdefined Tags (nginx config)
 		ngx_keyval_t *kvp = (ngx_keyval_t*)bsearch(&token->name, conConf->locConf->keyValuePairs->elts,
 			conConf->locConf->keyValuePairs->nelts, sizeof(ngx_keyval_t), ngxKeyValKeyComparer);
-		if(kvp == NULL || !strbAppendNgxString(curStrb, &kvp->value)) return 0;
+
+		if(kvp != NULL) if(!strbAppendNgxString(curStrb, &kvp->value)) return 0;
 	}
 
 	if(token->attributes.nelts) {
@@ -424,7 +445,6 @@ static int applyPatternAppendToken(stringBuilder *strb, alsPatternToken *token, 
 	return 1;
 }
 static int applyPatternSectionEnabled(alsConnectionConfig *conConf, ngx_str_t *sectionName) {
-	return 1;
 	ngx_array_t *sections = conConf->locConf->sections;
 
 	if(!sections) return 0;
@@ -457,7 +477,9 @@ static int applyPatternSub(stringBuilder *strb, ngx_array_t *tokens, alsConnecti
 	return 1;
 }
 static int applyPattern(stringBuilder *strb, alsPattern *pattern, alsConnectionConfig *conConf, alsFileEntriesInfo *fileEntriesInfo) {
+	logHttpDebugMsg0(alsLog, "autols: Applying Pattern");
 	return applyPatternSub(strb, &pattern->tokens, conConf, fileEntriesInfo, NULL);
+	logHttpDebugMsg0(alsLog, "autols: Pattern applied");
 }
 
 static ngx_rc_t setRequestPath(alsConnectionConfig *conConf) {
@@ -649,10 +671,9 @@ static ngx_rc_t createReplyBody(alsConnectionConfig *conConf, alsFileEntriesInfo
 	stringBuilder strb;
 	if(!strbDefaultInit(&strb, bufSize, bufSize)) return NGX_ERROR;
 
-	appendConfig(&strb, conConf);
+	if(conConf->locConf->printDebug) appendConfig(&strb, conConf);
 
 	if(!applyPattern(&strb, pattern, conConf, fileEntriesInfo)) return NGX_ERROR;
-	logHttpDebugMsg0(alsLog, "autols: Reply body generated");
 
 
 	*out = ngx_alloc_chain_link(conConf->request->connection->pool);
@@ -680,6 +701,11 @@ ngx_rc_t ngx_http_autols_handler(ngx_http_request_t *r) {
 	ngx_rc_t          rc;
 
 	counters[CounterHandlerInvoke]++;
+	if(processHandlerFirstInvokeOn == NULL) {
+		processHandlerFirstInvokeOn = (ngx_tm_t*)calloc(1, sizeof(ngx_tm_t));
+		ngx_gmtime(ngx_time(), processHandlerFirstInvokeOn);
+	}
+
 
 	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "autols: Invoked");
 	if(r->uri.data[r->uri.len - 1] != '/') return NGX_DECLINED;
@@ -745,7 +771,6 @@ void* ngx_http_autols_create_main_conf(ngx_conf_t *cf) {
 	ngx_http_autols_main_conf_t *conf;
 	conf = (ngx_http_autols_main_conf_t*)ngx_pcalloc(cf->pool, sizeof(ngx_http_autols_main_conf_t));
 	if(conf == NULL) return NULL;
-	alsLog = cf->log;
 
 	ngx_gmtime(ngx_time(), &conf->createdOn);
 
@@ -754,7 +779,6 @@ void* ngx_http_autols_create_main_conf(ngx_conf_t *cf) {
 }
 char* ngx_http_autols_init_main_conf(ngx_conf_t *cf, void *conf) {
 	ngx_http_autols_main_conf_t *mainConf = (ngx_http_autols_main_conf_t*)conf;
-	alsLog = cf->log;
 
 	ngx_array_init(&mainConf->patterns, cf->pool, 2, sizeof(alsPattern));
 
@@ -766,13 +790,15 @@ void* ngx_http_autols_create_loc_conf(ngx_conf_t *cf) {
 	ngx_http_autols_loc_conf_t  *conf;
 	conf = (ngx_http_autols_loc_conf_t*)ngx_pcalloc(cf->pool, sizeof(ngx_http_autols_loc_conf_t));
 	if(conf == NULL) return NULL;
-	alsLog = cf->log;
 
 	ngx_gmtime(ngx_time(), &conf->createdOn);
 
 	conf->enable = NGX_CONF_UNSET;
 	conf->localTime = NGX_CONF_UNSET;
+	conf->printDebug = NGX_CONF_UNSET;
+	conf->sections = (ngx_array_t*)NGX_CONF_UNSET_PTR;
 	conf->entryIgnores = (ngx_array_t*)NGX_CONF_UNSET_PTR;
+	conf->keyValuePairs = (ngx_array_t*)NGX_CONF_UNSET_PTR;
 
 	counters[CounterLocCreateCall]++;
 	return conf;
@@ -780,15 +806,15 @@ void* ngx_http_autols_create_loc_conf(ngx_conf_t *cf) {
 char* ngx_http_autols_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child) {
 	ngx_http_autols_loc_conf_t *prev = (ngx_http_autols_loc_conf_t*)parent;
 	ngx_http_autols_loc_conf_t *conf = (ngx_http_autols_loc_conf_t*)child;
-	alsLog = cf->log;
+	alsLog = cf->log; ngx_uint_t oldLevel = cf->log->log_level; cf->log->log_level |= NGX_LOG_DEBUG_HTTP;
 
 	ngx_conf_merge_value(conf->enable, prev->enable, 0);
 	ngx_conf_merge_value(conf->localTime, prev->localTime, 0);
+	ngx_conf_merge_value(conf->printDebug, prev->printDebug, 0);
 	ngx_conf_merge_str_value(conf->patternPath, prev->patternPath, "");
 	ngx_conf_merge_ptr_value(conf->sections, prev->sections, NULL);
 	ngx_conf_merge_ptr_value(conf->entryIgnores, prev->entryIgnores, NULL);
 	ngx_conf_merge_ptr_value(conf->keyValuePairs, prev->keyValuePairs, NULL);
-
 
 	ngx_http_autols_main_conf_t *mainConf;
 	mainConf = (ngx_http_autols_main_conf_t*)ngx_http_conf_get_module_main_conf(cf, ngx_http_autols_module);
@@ -816,6 +842,17 @@ char* ngx_http_autols_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child) 
 		}
 	}
 
+	if(conf->sections) {
+		ngx_qsort(conf->sections->elts, conf->sections->nelts, sizeof(ngx_str_t), ngxStringComparer);
+	}
+	if(conf->entryIgnores) {
+		ngx_qsort(conf->entryIgnores->elts, conf->entryIgnores->nelts, sizeof(ngx_str_t), ngxStringComparer);
+	}
+	if(conf->keyValuePairs) {
+		ngx_qsort(conf->keyValuePairs->elts, conf->keyValuePairs->nelts, sizeof(ngx_str_t), ngxKeyValElemComparer);
+	}
+
+	cf->log->log_level = oldLevel;
 	counters[CounterLocMergeCall]++;
 	return NGX_CONF_OK;
 }
@@ -835,10 +872,11 @@ ngx_rc_t ngx_http_autols_init(ngx_conf_t *cf) {
 	return NGX_OK;
 }
 
+
+
 #if USE_REGEX
 char* ngx_conf_autols_regex_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
 	u_char regexCompileErrorMsg[NGX_MAX_CONF_ERRSTR];
-	ngx_str_t *regexPattern, *regexPatternLast;
 	ngx_regex_compile_t regexCompile;
 	ngx_regex_elt_t *regexEntry;
 	ngx_array_t **dstArray;
@@ -856,10 +894,10 @@ char* ngx_conf_autols_regex_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void 
 	regexCompile.err.len = NGX_MAX_CONF_ERRSTR;
 	regexCompile.pool = cf->pool;
 
-	regexPattern = (ngx_str_t*)cf->args->elts;
-	regexPatternLast = regexPattern + cf->args->nelts;
-	for(;regexPattern != regexPatternLast; regexPattern++) {
-		regexCompile.pattern = *regexPattern;
+	uint32_t i;
+	for(i = 1; i < cf->args->nelts; i++) {
+		ngx_str_t *arg = (ngx_str_t*)cf->args->elts + i;
+		regexCompile.pattern = *arg;
 		if(ngx_regex_compile(&regexCompile) != NGX_OK) {
 			ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "%V", &regexCompile.err);
 			return (char*)NGX_CONF_ERROR;
@@ -868,21 +906,90 @@ char* ngx_conf_autols_regex_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void 
 		regexEntry = (ngx_regex_elt_t*)ngx_array_push(*dstArray);
 		if(regexEntry == NULL) return (char*)NGX_CONF_ERROR;
 		regexEntry->regex = regexCompile.regex;
-		regexEntry->name = regexPattern->data;
+		regexEntry->name = arg->data;
 	}
 
 	return NGX_CONF_OK;
 }
 #endif
 
-char* ngx_conf_autols_regex_then_string_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
+char* ngx_conf_autols_set_regex_then_string_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
+	alsLog = cf->log; cf->log->log_level |= NGX_LOG_DEBUG_HTTP;
+	logHttpDebugMsg0(alsLog, "autols: ngx_conf_autols_set_regex_then_string_array_slot");
 #if USE_REGEX
 	return ngx_conf_autols_regex_array_slot(cf, cmd, conf);
 #else
-	return ngx_conf_set_str_array_slot(cf, cmd, conf);
+	return ngx_conf_autols_set_str_array_slot(cf, cmd, conf);
 #endif
+	logHttpDebugMsg0(alsLog, "autols: /ngx_conf_autols_set_regex_then_string_array_slot");
+}
+
+char* ngx_conf_autols_set_keyval_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
+	alsLog = cf->log; cf->log->log_level |= NGX_LOG_DEBUG_HTTP;
+
+	logHttpDebugMsg0(alsLog, "autols: ngx_conf_autols_set_keyval_array_slot");
+	ngx_array_t **a = (ngx_array_t **)((char*)conf + cmd->offset);
+	if(*a == NGX_CONF_UNSET_PTR) {
+		*a = ngx_array_create(cf->pool, 4, sizeof(ngx_keyval_t));
+		if(*a == NULL) {
+			return (char*)NGX_CONF_ERROR;
+		}
+	}
+
+	uint32_t i;
+	for(i = 1; i < cf->args->nelts; i++) {
+		ngx_str_t *arg = (ngx_str_t*)cf->args->elts + i;
+		u_char* equalPos = (u_char*)ngx_strchr(arg->data, '=');
+		if(equalPos == NULL) return (char*)NGX_CONF_ERROR;
+
+		ngx_keyval_t *pair = (ngx_keyval_t*)ngx_array_push(*a);
+		if(pair == NULL) return (char*)NGX_CONF_ERROR;
+
+		pair->key.data = arg->data;
+		pair->key.len = equalPos - arg->data;
+		pair->value.data = equalPos + 1;
+		pair->value.len = (arg->data + arg->len) - (equalPos + 1);
+		logHttpDebugMsg2(alsLog, "(%V = %V)", &pair->key, &pair->value);
+	}
+
+	if(cmd->post) {
+		ngx_conf_post_t *post = (ngx_conf_post_t*)cmd->post;
+		return post->post_handler(cf, post, a);
+	}
+
+	logHttpDebugMsg0(alsLog, "autols: /ngx_conf_autols_set_keyval_array_slot");
+	return NGX_CONF_OK;
 }
 
 
 
+char* ngx_conf_autols_set_str_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
+	alsLog = cf->log; cf->log->log_level |= NGX_LOG_DEBUG_HTTP;
 
+	logHttpDebugMsg0(alsLog, "autols: ngx_conf_autols_set_str_array_slot");
+	ngx_array_t **a = (ngx_array_t **)((char*)conf + cmd->offset);
+	if(*a == NGX_CONF_UNSET_PTR) {
+		*a = ngx_array_create(cf->pool, 4, sizeof(ngx_str_t));
+		if(*a == NULL) {
+			return (char*)NGX_CONF_ERROR;
+		}
+	}
+
+	uint32_t i;
+	for(i = 1; i < cf->args->nelts; i++) {
+		ngx_str_t *arg = (ngx_str_t*)cf->args->elts + i;
+		ngx_str_t *str = (ngx_str_t*)ngx_array_push(*a);
+		if(str == NULL) return (char*)NGX_CONF_ERROR;
+
+		*str = *arg;
+		logHttpDebugMsg1(alsLog, "%V", str);
+	}
+
+	if(cmd->post) {
+		ngx_conf_post_t *post = (ngx_conf_post_t*)cmd->post;
+		return post->post_handler(cf, post, a);
+	}
+
+	logHttpDebugMsg0(alsLog, "autols: /ngx_conf_autols_set_str_array_slot");
+	return NGX_CONF_OK;
+}

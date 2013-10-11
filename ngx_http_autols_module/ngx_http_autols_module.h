@@ -53,8 +53,9 @@ char *ngx_http_autols_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child);
 
 ngx_rc_t ngx_http_autols_handler(ngx_http_request_t *r);
 
-char* ngx_conf_autols_regex_then_string_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
-
+char* ngx_conf_autols_set_regex_then_string_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+char* ngx_conf_autols_set_keyval_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+char* ngx_conf_autols_set_str_array_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 typedef struct {
 	ngx_tm_t createdOn;
@@ -63,7 +64,7 @@ typedef struct {
 
 typedef struct {
 	ngx_tm_t createdOn;
-	ngx_flag_t enable, localTime;
+	ngx_flag_t enable, printDebug, localTime;
     ngx_str_t patternPath;
     ngx_array_t *entryIgnores, *sections, *keyValuePairs;
 } ngx_http_autols_loc_conf_t;

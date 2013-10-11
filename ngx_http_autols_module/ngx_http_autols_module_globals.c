@@ -2,21 +2,49 @@
 
 static ngx_command_t ngx_http_autols_commands[] = {
 	{ngx_string("autols"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_FLAG, //TODO: NGX_CONF_FLAG?
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_FLAG,
 	ngx_conf_set_flag_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_autols_loc_conf_t, enable),
 	NULL},
 
-	{ngx_string("autols_ignore"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_1MORE, //TODO: NGX_CONF_FLAG?
-	ngx_conf_autols_regex_then_string_array_slot,
+	{ngx_string("autols_print_debug"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_FLAG,
+	ngx_conf_set_flag_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_autols_loc_conf_t, printDebug),
+	NULL},
+
+	{ngx_string("autols_pattern_path"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_str_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_autols_loc_conf_t, patternPath),
+	NULL},
+
+	{ngx_string("autols_ignores"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_1MORE,
+	ngx_conf_autols_set_regex_then_string_array_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_autols_loc_conf_t, entryIgnores),
 	NULL},
 
+	{ngx_string("autols_sections"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_1MORE,
+	ngx_conf_autols_set_str_array_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_autols_loc_conf_t, sections),
+	NULL},
+
+	{ngx_string("autols_variables"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_1MORE,
+	ngx_conf_autols_set_keyval_array_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_autols_loc_conf_t, keyValuePairs),
+	NULL},
+
 	{ngx_string("autols_local_time"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_FLAG, //TODO: NGX_CONF_FLAG?
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_FLAG, 
 	ngx_conf_set_flag_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_autols_loc_conf_t, localTime),
