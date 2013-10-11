@@ -57,11 +57,13 @@ char* ngx_conf_autols_regex_then_string_array_slot(ngx_conf_t *cf, ngx_command_t
 
 
 typedef struct {
+	ngx_tm_t createdOn;
     ngx_array_t patterns;
 } ngx_http_autols_main_conf_t;
 
 typedef struct {
-    ngx_flag_t enable, localTime;
+	ngx_tm_t createdOn;
+	ngx_flag_t enable, localTime;
     ngx_str_t patternPath;
     ngx_array_t *entryIgnores, *sections, *keyValuePairs;
 } ngx_http_autols_loc_conf_t;
