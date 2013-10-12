@@ -30,9 +30,9 @@ Directives
 **Context**: http, server, location  
 Enables autols directory listing.  
 
-***autols_pattern_path*** *TODO*  
-**Syntax**: `autols_pattern_path "/Path/To/Template/File"`  
-**Default**: `autols_pattern_path ""`  
+***autols_template_path*** *TODO*  
+**Syntax**: `autols_template_path "/Path/To/Template/File"`  
+**Default**: `autols_template_path ""`  
 **Context**: http, server, location  
 Sets the template to use. If empty, the default template is used.  
 
