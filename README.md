@@ -18,7 +18,7 @@ Once a template is written, it can be further manipulated through the nginx conf
 
 You can also define rules which **filter out files/directories** which you don't want to list (e.g. protected folders or files starting with '.').
 
-The default configuration of AutoLS will try mimic AutioIndex's layout but is a bit more stable when handling unicode, so it will handle most latin properly.
+The default configuration of AutoLS will try mimic AutioIndex's layout but is a bit more stable when handling unicode, so it will handle most latin characters properly.
 You will still see alignment issues when displaying complex characters (i.e. combining characters or asian characters which have different sizes)  
 If this is an issue, use/build a template which does not rely on monospace font (i.e. with html tables).
 
