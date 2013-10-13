@@ -9,5 +9,6 @@
 
 int32_t strbVNgxFormat(stringBuilder *strb, const char *fmt, va_list args);
 int32_t strbNgxFormat(stringBuilder *strb, const char *fmt, ...);
+int32_t strbNgxUtf8Length(stringBuilder *strb);
 
 #endif

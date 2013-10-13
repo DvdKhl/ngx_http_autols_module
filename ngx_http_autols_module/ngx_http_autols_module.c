@@ -28,11 +28,14 @@ static char defaultPagePattern[] =
 "    </script><!--{/JSVariable}--><!--{JSSource}-->" CRLF
 "    <script type=\"text/javascript\" src=\"<!--[JSSource]-->\"></script><!--{/JSSource}--><!--{CSSSource}-->" CRLF
 "    <link rel=\"stylesheet\" type=\"text/css\" href=\"<!--[CSSSource]-->\"><!--{/CSSSource}-->" CRLF
+"    <!--[Head]-->" CRLF
 "  </head>" CRLF
 "  <body bgcolor=\"white\"><!--{Body}-->" CRLF
+"    <!--[Header]-->" CRLF
 "    <h1>Index of <!--[RequestUri]--></h1>" CRLF
 "    <hr>" CRLF
-"    <pre><!--{EntryLoop}--><a href=\"<!--[EntryName?Escape=Uri&NoCount]-->\"><!--[EntryName?MaxLength=66]--></a><!--[EntryModifiedOn?StartAt=82]--> <!--[EntrySize?Format=%24s]-->\r\n<!--{/EntryLoop}--></pre><!--{/Body}-->" CRLF
+"    <pre><!--{EntryLoop}--><a href=\"<!--[EntryName?Escape=Uri&NoCount]-->\"><!--[EntryName?MaxLength=66&Utf8Count]--></a><!--[EntryModifiedOn?StartAt=82]--> <!--[EntrySize?Format=%24s]-->\r\n<!--{/EntryLoop}--></pre><!--{/Body}-->" CRLF
+"    <!--[Footer]-->" CRLF
 "  </body>" CRLF
 "</html>";
 
@@ -48,13 +51,38 @@ static void appendConfigPattern(stringBuilder *strb, alsPattern *pattern, ngx_ar
 	pattern++;
 }
 static void appendConfig(stringBuilder *strb, alsConnectionConfig *conConf) {
+	char cwd[NGX_MAX_PATH];
 	int i;
+
+	if(!ngx_getcwd(cwd, NGX_MAX_PATH)) logHttpDebugMsg0(alsLog, "autols: Getting cwd failed");
+	
+	//ngx_file_t file; 
+	//ngx_memzero(&file, sizeof(ngx_file_t));
+	//
+	//file.name.data = (u_char*)"README";
+	//file.name.len = 6;
+	//file.log = alsLog;
+	//
+	//file.fd = ngx_open_file((u_char*)"README", NGX_FILE_RDONLY, NGX_FILE_OPEN, NGX_FILE_DEFAULT_ACCESS);
+	//if(file.fd == NGX_INVALID_FILE) logHttpDebugMsg0(alsLog, "autols: Invalid File");
+	//	
+	//u_char buf[1024];
+	//ngx_memzero(buf, 1024);
+	//logHttpDebugMsg0(alsLog, "autols: 1");
+	//ngx_read_file(&file, buf, 1024, 0);
+	//strbFormat(strb, "README = %s" CRLF, buf);
+	//logHttpDebugMsg0(alsLog, "autols: 2");
+	//
+	//
+	//if(ngx_close_file(file.fd) == NGX_FILE_ERROR) return;
+
 
 	logHttpDebugMsg0(alsLog, "autols: Printing Globals");
 	strbAppendCString(strb, "<pre>#Global" CRLF);
 	strbFormat(strb, "ngx_process = %d" CRLF, ngx_process);
 	ngx_tm_t tm = *processHandlerFirstInvokeOn;
 	strbFormat(strb, "processHandlerFirstInvokeOn = %02d-%02d-%d %02d:%02d" CRLF, tm.ngx_tm_mday, tm.ngx_tm_mon, tm.ngx_tm_year, tm.ngx_tm_hour, tm.ngx_tm_min);
+	strbFormat(strb, "Current Working Directory = %s" CRLF, cwd);
 
 	logHttpDebugMsg0(alsLog, "autols: Printing Main Config");
 	strbAppendCString(strb, CRLF "#Main Config" CRLF);
@@ -366,6 +394,12 @@ static int applyPatternProcessAttributes(stringBuilder *strbValue, ngx_array_t *
 			toPad = ngx_max(0, toPad - (strbSize - conConf->ptnEntryStartPos));
 			if(!strbTransform(strbValue, strbTransPadLeft, ' ', toPad + strbValue->size)) return 0;
 
+		} else if(ngx_cstr_compare(&attribute->name, "AsLossyAscii")) {
+			if(attribute->value.len && !strbTransform(strbValue, strbTransAsLossyAscii, attribute->value.data)) return 0;
+
+		} else if(ngx_cstr_compare(&attribute->name, "Utf8Count")) {
+			conConf->ptnEntryStartPos += strbValue->size - strbNgxUtf8Length(strbValue);
+
 		} else if(ngx_cstr_compare(&attribute->name, "NoCount")) {
 			conConf->ptnEntryStartPos += strbValue->size;
 
@@ -388,7 +422,7 @@ static int applyPatternProcessAttributes(stringBuilder *strbValue, ngx_array_t *
 				if(!strbTransform(strbValue, strbTransEscapeUri, NGX_ESCAPE_URI_COMPONENT)) return 0;
 			} else if(ngx_cstr_compare(&attribute->value, "Uri")) {
 				if(!strbTransform(strbValue, strbTransEscapeUri, NGX_ESCAPE_URI)) return 0;
-			} else if(ngx_cstr_compare(&attribute->value, "Http")) {
+			} else if(ngx_cstr_compare(&attribute->value, "Html")) {
 				if(!strbTransform(strbValue, strbTransEscapeHtml)) return 0;
 			} else return 0;
 		}
@@ -653,6 +687,8 @@ static ngx_rc_t getFiles(alsConnectionConfig *conConf, ngx_dir_t *dir, alsFileEn
 		fileEntriesInfo->totalFileNamesLengthHtmlEscaped += entry->nameLenAsHtml = entry->name.len +
 			ngx_escape_html(NULL, entry->name.data, entry->name.len);
 
+		entry->nameLenAsUtf8 = ngx_utf8_length(entry->name.data, entry->name.len);
+
 		logHttpDebugMsg0(alsLog, "autols: File info retrieved");
 		counters[CounterFileCount]++;
 	}
@@ -674,7 +710,6 @@ static ngx_rc_t createReplyBody(alsConnectionConfig *conConf, alsFileEntriesInfo
 	if(conConf->locConf->printDebug) appendConfig(&strb, conConf);
 
 	if(!applyPattern(&strb, pattern, conConf, fileEntriesInfo)) return NGX_ERROR;
-
 
 	*out = ngx_alloc_chain_link(conConf->request->connection->pool);
 	(*out)->buf = ngx_create_temp_buf(conConf->request->connection->pool, strb.size);

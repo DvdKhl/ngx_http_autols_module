@@ -98,7 +98,7 @@ int32_t strbDefaultInit(stringBuilder *strb, int32_t minCapacity, int32_t newBuf
 int32_t strbEnsureContinuousCapacity(stringBuilder *strb, int32_t capacity) {
 	if(capacity < 1 || strbCurFree(strb) >= capacity) return 1;
 
-	int32_t appendedCapacity = min(capacity, strb->alloc->newBufferSize);
+	int32_t appendedCapacity = max(capacity, strb->alloc->newBufferSize);
 	if(!strb->alloc->append(strb, 1, appendedCapacity)) return 0;
 
 	strbUseNextChain(strb);
@@ -121,7 +121,7 @@ int32_t strbSetSize(stringBuilder *strb, int32_t size) {
 			strb->size += toSet;
 			size -= toSet;
 
-			if(strbCurFree(strb) == 0) strbUseNextChain(strb);
+			if(size != 0) strbUseNextChain(strb);
 		}
 
 	} else {
@@ -136,7 +136,8 @@ int32_t strbSetSize(stringBuilder *strb, int32_t size) {
 				strbCurLast(strb) -= toRemove;
 				sizeDiff -= toRemove;
 
-				if(strbCurSize(strb) == 0 && sizeDiff != 0) {
+				//if(strbCurSize(strb) == 0 && sizeDiff != 0) {
+				if(sizeDiff != 0) {
 					strb->lastLink = strb->lastLink->prev;
 					strb->capacity += strbCurFree(strb);
 				}
@@ -159,7 +160,7 @@ int32_t strbAppendMemory(stringBuilder *strb, char *src, int32_t size) {
 		size -= copyLength;
 		src += copyLength;
 
-		if(strbCurFree(strb) == 0) strbUseNextChain(strb);
+		if(size != 0) strbUseNextChain(strb);
 	}
 	return 1;
 }
@@ -184,7 +185,7 @@ int32_t strbAppendRepeat(stringBuilder *strb, char c, int32_t length) {
 		strbCurLast(strb) += toPad;
 		length -= toPad;
 
-		if(strbCurFree(strb) == 0) strbUseNextChain(strb);
+		if(length != 0) strbUseNextChain(strb);
 	}
 
 	return 1;
@@ -464,6 +465,28 @@ int32_t strbTransPadLeft(stringBuilder *strb, char *src, int32_t size, va_list a
 	int32_t toPad = va_arg(args, int32_t);
 	if(!strbAppendRepeat(strb, padChar, max(0, toPad - size))) return 0;
 	return strbAppendMemory(strb, src, size);
+}
+
+int32_t strbTransAsLossyAscii(stringBuilder *strb, char *src, int32_t size, va_list args) {
+	if(!strbEnsureContinuousCapacity(strb, size)) return 0;
+
+	char replacementChar = va_arg(args, int32_t);
+	char *last = strb->lastLink->last;
+	while(size) {
+		if(*src & 0x80) {
+			size--;
+			*last++ = replacementChar;
+			strb->size++;
+
+			while(*++src & 0x80) size--;
+		} else {
+			//Ascii Character
+			*last++ = *src++;
+			strb->size++;
+		}
+		size--;
+	}
+	return 1;
 }
 
 void strbDispose(stringBuilder *strb) {

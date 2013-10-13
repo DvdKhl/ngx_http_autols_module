@@ -313,3 +313,15 @@ int32_t strbNgxFormat(stringBuilder *strb, const char *fmt, ...) {
 
 	return rc;
 }
+
+
+int32_t strbNgxUtf8Length(stringBuilder *strb) {
+	int32_t length = 0;
+	stringBuilderChainLink *link = strb->startLink;
+	stringBuilderChainLink *linkLimit = strb->lastLink->next;
+	do {
+		length += ngx_utf8_length((u_char*)link->start, link->last - link->start);
+	} while((link = link->next) != linkLimit);
+
+	return length;
+}

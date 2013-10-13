@@ -113,7 +113,7 @@ typedef struct {
     ngx_tm_t modifiedOn;
 	int64_t size;
 
-	int32_t nameLenAsHtml, nameLenAsUri;
+	int32_t nameLenAsHtml, nameLenAsUri, nameLenAsUtf8;
 } alsFileEntry;
 
 extern ngx_module_t ngx_http_autols_module;
