@@ -15,7 +15,7 @@ static ngx_command_t ngx_http_autols_commands[] = {
 	offsetof(ngx_http_autols_loc_conf_t, printDebug),
 	NULL},
 
-	{ngx_string("autols_pattern_path"),
+	{ngx_string("autols_template_path"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_str_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
