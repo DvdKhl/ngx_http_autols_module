@@ -56,27 +56,6 @@ static void appendConfig(stringBuilder *strb, alsConnectionConfig *conConf) {
 
 	if(!ngx_getcwd(cwd, NGX_MAX_PATH)) logHttpDebugMsg0(alsLog, "autols: Getting cwd failed");
 	
-	//ngx_file_t file; 
-	//ngx_memzero(&file, sizeof(ngx_file_t));
-	//
-	//file.name.data = (u_char*)"README";
-	//file.name.len = 6;
-	//file.log = alsLog;
-	//
-	//file.fd = ngx_open_file((u_char*)"README", NGX_FILE_RDONLY, NGX_FILE_OPEN, NGX_FILE_DEFAULT_ACCESS);
-	//if(file.fd == NGX_INVALID_FILE) logHttpDebugMsg0(alsLog, "autols: Invalid File");
-	//	
-	//u_char buf[1024];
-	//ngx_memzero(buf, 1024);
-	//logHttpDebugMsg0(alsLog, "autols: 1");
-	//ngx_read_file(&file, buf, 1024, 0);
-	//strbFormat(strb, "README = %s" CRLF, buf);
-	//logHttpDebugMsg0(alsLog, "autols: 2");
-	//
-	//
-	//if(ngx_close_file(file.fd) == NGX_FILE_ERROR) return;
-
-
 	logHttpDebugMsg0(alsLog, "autols: Printing Globals");
 	strbAppendCString(strb, "<pre>#Global" CRLF);
 	strbFormat(strb, "ngx_process = %d" CRLF, ngx_process);
@@ -435,6 +414,8 @@ static int applyPatternProcessAttributes(stringBuilder *strbValue, ngx_array_t *
 static int applyPatternAppendToken(stringBuilder *strb, alsPatternToken *token, alsConnectionConfig *conConf, alsFileEntry *fileEntry) {
 	static stringBuilder strbValue;
 	if(!strbValue.isInitialized) if(!strbDefaultInit(&strbValue, 1024, 1024)) return 0;
+	//stringBuilder strbValue;
+	//if(!strbDefaultInit(&strbValue, 1024, 1024)) return 0;
 
 	stringBuilder *curStrb;
 	if(token->attributes.nelts) {
@@ -846,8 +827,8 @@ char* ngx_http_autols_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child) 
 	ngx_conf_merge_value(conf->enable, prev->enable, 0);
 	ngx_conf_merge_value(conf->localTime, prev->localTime, 0);
 	ngx_conf_merge_value(conf->printDebug, prev->printDebug, 0);
-	ngx_conf_merge_str_value(conf->patternPath, prev->patternPath, "");
 	ngx_conf_merge_ptr_value(conf->sections, prev->sections, NULL);
+	ngx_conf_merge_str_value(conf->patternPath, prev->patternPath, "");
 	ngx_conf_merge_ptr_value(conf->entryIgnores, prev->entryIgnores, NULL);
 	ngx_conf_merge_ptr_value(conf->keyValuePairs, prev->keyValuePairs, NULL);
 
@@ -855,27 +836,63 @@ char* ngx_http_autols_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child) 
 	mainConf = (ngx_http_autols_main_conf_t*)ngx_http_conf_get_module_main_conf(cf, ngx_http_autols_module);
 
 	if(!getPattern(&conf->patternPath, &mainConf->patterns)) {
-		alsPattern *pattern;
+		alsPattern *pattern = (alsPattern*)ngx_array_push(&mainConf->patterns);
+		pattern->path = conf->patternPath;
 
 		if(conf->patternPath.len == 0) {
-			logHttpDebugMsg0(alsLog, "autols: Parsing default pattern");
-			pattern = (alsPattern*)ngx_array_push(&mainConf->patterns);
-			if(pattern == NULL) return "ngx_http_autols_merge_loc_conf: ngx_array_push returned NULL";
+			logHttpDebugMsg0(cf->log, "autols: Parsing default template");
+			if(pattern == NULL) return "AutoLS ngx_http_autols_merge_loc_conf: ngx_array_push returned NULL";
 
 			pattern->content.data = (u_char*)defaultPagePattern;
 			pattern->content.len = ngx_strlen(defaultPagePattern);
-			pattern->path.data = NULL;
-			pattern->path.len = 0;
-
-			ngx_array_init(&pattern->tokens, cf->pool, 10, sizeof(alsPatternToken));
-			if(!parsePattern(&pattern->tokens, &pattern->content, cf->pool)) {
-				return "ngx_http_autols_merge_loc_conf: Couldn't parse default pattern";
-			}
 
 		} else {
-			//TODO: Read and parse template from disk if found
+			ngx_file_t file; 
+			ngx_memzero(&file, sizeof(ngx_file_t));
+
+			file.name.data = (u_char*)ngx_pcalloc(cf->temp_pool, conf->patternPath.len + 1);
+			if(file.name.data == NULL)  return "AutoLS ngx_http_autols_merge_loc_conf: ngx_pcalloc returned NULL";
+
+			ngx_memcpy(file.name.data, conf->patternPath.data, conf->patternPath.len);
+			file.name.len = conf->patternPath.len;
+			file.name.data[file.name.len] = '\0';
+			file.log = cf->log;
+					
+			if(ngx_file_info(file.name.data, &file.info) == NGX_FILE_ERROR) {
+				return "AutoLS Couldn't get template file info";
+			}
+
+			if(ngx_file_size(&file.info) > (10 << 20)) {
+				//Bigger than 10mb
+				return "AutoLS Sanity check failed: Template file bigger than 10MiB "
+					"(Comment out this line in source if you want to use template files bigger than 10MiB)";
+			}
+
+			file.fd = ngx_open_file(file.name.data, NGX_FILE_RDONLY, NGX_FILE_OPEN, NGX_FILE_DEFAULT_ACCESS);
+			if(file.fd == NGX_INVALID_FILE) {
+				return "AutoLS Couldn't open template file";
+			}
+			
+			ssize_t readBytes = 0;
+			u_char *buf = (u_char*)ngx_palloc(cf->pool, ngx_file_size(&file.info) + 1);
+			if((readBytes = ngx_read_file(&file, buf, ngx_file_size(&file.info), 0)) == NGX_ERROR) {
+				ngx_close_file(file.fd);
+				return "AutoLS failed to read template file";
+			}
+
+			if(ngx_close_file(file.fd) == NGX_FILE_ERROR) return "AutoLS failed to close template file";
+
+			pattern->content.data = buf;
+			pattern->content.len = readBytes;
+		}
+
+		ngx_array_init(&pattern->tokens, cf->pool, 10, sizeof(alsPatternToken));
+		if(!parsePattern(&pattern->tokens, &pattern->content, cf->pool)) {
+			return "AutoLS ngx_http_autols_merge_loc_conf: Couldn't parse template";
 		}
 	}
+
+	
 
 	if(conf->sections) {
 		ngx_qsort(conf->sections->elts, conf->sections->nelts, sizeof(ngx_str_t), ngxStringComparer);
