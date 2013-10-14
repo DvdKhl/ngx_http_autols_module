@@ -44,11 +44,13 @@ static void appendConfigPattern(stringBuilder *strb, alsPattern *pattern, ngx_ar
 	alsPatternToken *tokenLimit = token + tokens->nelts;
 	while(token != tokenLimit) {
 		strbAppendRepeat(strb, ' ', depth);
-		strbNgxFormat(strb, "(N=%V, S=%d, E=%d, AC=%d)" CRLF, &token->name, token->start - (char*)pattern->content.data, token->end - (char*)pattern->content.data, token->attributes.nelts);
+		strbNgxFormat(strb, "(N=%V, S=%d, E=%d, AC=%d)" CRLF, &token->name,
+			token->start - (char*)pattern->content.data,
+			token->end - (char*)pattern->content.data, token->attributes.nelts);
+
 		appendConfigPattern(strb, pattern, &token->children, depth + 1);
 		token++;
 	}
-	pattern++;
 }
 static void appendConfig(stringBuilder *strb, alsConnectionConfig *conConf) {
 	char cwd[NGX_MAX_PATH];
@@ -60,13 +62,15 @@ static void appendConfig(stringBuilder *strb, alsConnectionConfig *conConf) {
 	strbAppendCString(strb, "<pre>#Global" CRLF);
 	strbFormat(strb, "ngx_process = %d" CRLF, ngx_process);
 	ngx_tm_t tm = *processHandlerFirstInvokeOn;
-	strbFormat(strb, "processHandlerFirstInvokeOn = %02d-%02d-%d %02d:%02d" CRLF, tm.ngx_tm_mday, tm.ngx_tm_mon, tm.ngx_tm_year, tm.ngx_tm_hour, tm.ngx_tm_min);
+	strbFormat(strb, "processHandlerFirstInvokeOn = %02d-%02d-%d %02d:%02d" CRLF,
+		tm.ngx_tm_mday, tm.ngx_tm_mon, tm.ngx_tm_year, tm.ngx_tm_hour, tm.ngx_tm_min);
 	strbFormat(strb, "Current Working Directory = %s" CRLF, cwd);
 
 	logHttpDebugMsg0(alsLog, "autols: Printing Main Config");
 	strbAppendCString(strb, CRLF "#Main Config" CRLF);
 	tm = conConf->mainConf->createdOn;
-	strbFormat(strb, "mainConf->createdOn = %02d-%02d-%d %02d:%02d" CRLF, tm.ngx_tm_mday, tm.ngx_tm_mon, tm.ngx_tm_year, tm.ngx_tm_hour, tm.ngx_tm_min);
+	strbFormat(strb, "mainConf->createdOn = %02d-%02d-%d %02d:%02d" CRLF,
+		tm.ngx_tm_mday, tm.ngx_tm_mon, tm.ngx_tm_year, tm.ngx_tm_hour, tm.ngx_tm_min);
 
 	logHttpDebugMsg0(alsLog, "autols: Printing Main Config Patterns");
 	strbAppendCString(strb, "Parsed Patterns:" CRLF);
@@ -83,7 +87,8 @@ static void appendConfig(stringBuilder *strb, alsConnectionConfig *conConf) {
 	logHttpDebugMsg0(alsLog, "autols: Printing Location Config");
 	strbAppendCString(strb, "#Location Config" CRLF);
 	tm = conConf->locConf->createdOn;
-	strbFormat(strb, "locConf->createdOn = %02d-%02d-%d %02d:%02d" CRLF, tm.ngx_tm_mday, tm.ngx_tm_mon, tm.ngx_tm_year, tm.ngx_tm_hour, tm.ngx_tm_min);
+	strbFormat(strb, "locConf->createdOn = %02d-%02d-%d %02d:%02d" CRLF,
+		tm.ngx_tm_mday, tm.ngx_tm_mon, tm.ngx_tm_year, tm.ngx_tm_hour, tm.ngx_tm_min);
 	strbFormat(strb, "locConf->enable = %d" CRLF, conConf->locConf->enable);
 	strbFormat(strb, "locConf->localTime = %d" CRLF, conConf->locConf->localTime);
 	strbFormat(strb, "locConf->patternPath = %d" CRLF, conConf->locConf->patternPath);
@@ -248,7 +253,8 @@ static int parsePatternSub(ngx_array_t *tokens, ngx_str_t *content, u_char **cur
 		if(isSectionEnd) cur++;
 
 		u_char *tokenNameStart = cur;
-		while(((*cur >= 'A' && *cur <= 'Z') || (*cur >= 'a' && *cur <= 'z') || (*cur >= '0' && *cur <= '9')) && ++cur < curLimit);
+		while(((*cur >= 'A' && *cur <= 'Z') || (*cur >= 'a' && *cur <= 'z') ||
+			(*cur >= '0' && *cur <= '9')) && ++cur < curLimit);
 		int tokenNameLength = cur - tokenNameStart;
 
 		if(tokenNameLength <= 0) return 0;
@@ -265,9 +271,11 @@ static int parsePatternSub(ngx_array_t *tokens, ngx_str_t *content, u_char **cur
 			logHttpDebugMsg1(alsLog, "autols: Start of attribute found at %d", cur - content->data);
 
 			u_char *attributeNameStart = ++cur;
-			while(((*cur >= 'A' && *cur <= 'Z') || (*cur >= 'a' && *cur <= 'z') || (*cur >= '0' && *cur <= '9')) && ++cur < curLimit);
+			while(((*cur >= 'A' && *cur <= 'Z') || (*cur >= 'a' && *cur <= 'z') ||
+				(*cur >= '0' && *cur <= '9')) && ++cur < curLimit);
 			int attributeNameLength = cur - attributeNameStart;
-			if(attributeNameLength == 0 || cur >= curLimit || (*cur != '=' && *cur != closingChar && *cur != '&')) return 0;
+			if(attributeNameLength == 0 || cur >= curLimit ||
+				(*cur != '=' && *cur != closingChar && *cur != '&')) return 0;
 
 			u_char *attributeValueStart;
 			int attributeValueLength;
@@ -287,7 +295,8 @@ static int parsePatternSub(ngx_array_t *tokens, ngx_str_t *content, u_char **cur
 			attribute->name.len = attributeNameLength;
 			attribute->value.data = attributeValueStart;
 			attribute->value.len = attributeValueLength;
-			logHttpDebugMsg2(alsLog, "autols: Attribute information set (%V=\"%V\")", &attribute->name, &attribute->value);
+			logHttpDebugMsg2(alsLog, "autols: Attribute information set (%V=\"%V\")",
+				&attribute->name, &attribute->value);
 
 			//TODO if attribute->value is surrounded by "[]" get value from config (autols_variable=(name=value))
 		}
@@ -301,7 +310,8 @@ static int parsePatternSub(ngx_array_t *tokens, ngx_str_t *content, u_char **cur
 		token->name.len = tokenNameLength;
 		token->start = (char*)tokenNameStart - (isSectionEnd ? 6 : 5);
 
-		logHttpDebugMsg4(alsLog, "autols: Token information set (%V:%d, %d-%d)", &token->name, tokenNameLength, token->start, token->end);
+		logHttpDebugMsg4(alsLog, "autols: Token information set (%V:%d, %d-%d)",
+			&token->name, tokenNameLength, token->start, token->end);
 
 		if(isSection && !isSectionEnd) {
 			alsPatternToken *childStartToken = (alsPatternToken*)ngx_array_push(&token->children);
@@ -374,7 +384,8 @@ static int applyPatternProcessAttributes(stringBuilder *strbValue, ngx_array_t *
 			if(!strbTransform(strbValue, strbTransPadLeft, ' ', toPad + strbValue->size)) return 0;
 
 		} else if(ngx_cstr_compare(&attribute->name, "AsLossyAscii")) {
-			if(attribute->value.len && !strbTransform(strbValue, strbTransAsLossyAscii, attribute->value.data)) return 0;
+			if(attribute->value.len &&
+				!strbTransform(strbValue, strbTransAsLossyAscii, attribute->value.data)) return 0;
 
 		} else if(ngx_cstr_compare(&attribute->name, "Utf8Count")) {
 			conConf->ptnEntryStartPos += strbValue->size - strbNgxUtf8Length(strbValue);
@@ -491,6 +502,7 @@ static int applyPatternSub(stringBuilder *strb, ngx_array_t *tokens, alsConnecti
 	}
 	return 1;
 }
+
 static int applyPattern(stringBuilder *strb, alsPattern *pattern, alsConnectionConfig *conConf, alsFileEntriesInfo *fileEntriesInfo) {
 	logHttpDebugMsg0(alsLog, "autols: Applying Pattern");
 	return applyPatternSub(strb, &pattern->tokens, conConf, fileEntriesInfo, NULL);
