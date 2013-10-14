@@ -30,7 +30,7 @@ Directives
 **Context**: http, server, location  
 Enables autols directory listing.  
 
-***autols_template_path*** *TODO*  
+***autols_template_path***  
 **Syntax**: `autols_template_path "/Path/To/Template/File"`  
 **Default**: `autols_template_path ""`  
 **Context**: http, server, location  
@@ -100,7 +100,7 @@ The date when the file was last modified `dd-mm-jjjj hh:MM`.
 
 ***EntrySize***  
 **Context**: EntryLoop  
-The filesize empty for directories. *TODO*  
+The filesize, empty for directories. *TODO*  
 
 ***EntryName***  
 **Context**: EntryLoop  
