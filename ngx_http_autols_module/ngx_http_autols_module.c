@@ -17,13 +17,13 @@ static char defaultPagePattern[] =
 "    <meta charset=\"<!--[ReplyCharSet]-->\">" CRLF
 "    <title><!--[RequestUri]--> (AutoLS)</title><!--{JSVariable}-->" CRLF
 "    <script type=\"text/javascript\">" CRLF
-"      var dirListing = [<!--{EntryLoop}-->" CRLF
+"      var dirListing = [<!--{EntryLoop?Separator=,}-->" CRLF
 "        {" CRLF
 "          \"isDirectory\": <!--[EntryIsDirectory]-->," CRLF
 "          \"modifiedOn\": \"<!--[EntryModifiedOn]-->\"," CRLF
 "          \"size\": <!--[EntrySize]-->," CRLF
 "          \"name\": \"<!--[EntryName]-->\"" CRLF
-"        },<!--{/EntryLoop}-->" CRLF
+"        }<!--{/EntryLoop}-->" CRLF
 "      ];" CRLF
 "    </script><!--{/JSVariable}--><!--{JSSource}-->" CRLF
 "    <script type=\"text/javascript\" src=\"<!--[JSSource]-->\"></script><!--{/JSSource}--><!--{CSSSource}-->" CRLF
@@ -486,11 +486,21 @@ static int applyPatternSub(stringBuilder *strb, ngx_array_t *tokens, alsConnecti
 		if(nextToken == tokenLast) break;
 
 		if(ngx_cstr_compare(&nextToken->name, "EntryLoop")) {
+			ngx_str_t *separator;
+			if(nextToken->attributes.nelts) {
+				alsPatternAttribute *attribute = (alsPatternAttribute*)nextToken->attributes.elts;
+				if(!ngx_cstr_compare(&attribute->name, "Separator")) return 0;
+				separator = &attribute->value;
+			} else {
+				separator = NULL;
+			}
+
 			alsFileEntry *fileEntry = (alsFileEntry*)fileEntriesInfo->fileEntries.elts;
 			alsFileEntry *fileEntryLimit = fileEntry + fileEntriesInfo->fileEntries.nelts;
 			while(fileEntry != fileEntryLimit) {
 				conConf->ptnEntryStartPos = strb->size;
 				if(!applyPatternSub(strb, &nextToken->children, conConf, fileEntriesInfo, fileEntry++)) return 0;
+				if(separator && fileEntry != fileEntryLimit) if(!strbAppendNgxString(strb, separator)) return 0;
 			}
 
 		} else if(nextToken->children.nelts && applyPatternSectionEnabled(conConf, &nextToken->name)) {

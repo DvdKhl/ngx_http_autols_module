@@ -1,0 +1,144 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="<!--[ReplyCharSet]-->">
+    <title><!--[RequestUri]--> (AutoLS)</title>
+    <script type="text/javascript">
+
+        window.onload = function () {
+
+            var prefixes = ["b", "kb", "mb", "gb", "tb", "pb", "eb", "zb", "yb"];
+
+            var dirListing = [<!--{EntryLoop?Separator=,}-->
+                {
+                    "isDirectory": <!--[EntryIsDirectory]-->,
+                    "modifiedOn": "<!--[EntryModifiedOn]-->",
+                    "size": <!--[EntrySize]-->,
+                    "name": "<!--[EntryName]-->"
+                }<!--{/EntryLoop}-->
+            ];
+            
+            var contentTable = document.createElement("table");
+            contentTable.id = "contentTable";
+
+            var contentCaption = document.createElement("caption");
+            var contentCaptionTestNode = document.createTextNode("Index of <!--[RequestUri]-->");
+
+            contentCaption.appendChild(contentCaptionTestNode);
+            contentCaption.appendChild(document.createElement("hr"));
+
+            contentTable.appendChild(contentCaption);
+
+            for (var i = 0; i < dirListing.length; i++) {
+                var item = dirListing[i];
+
+                var row = document.createElement("tr");
+                contentTable.appendChild(row);
+
+                var td = document.createElement("td");
+                td.className = "Name";
+
+                var a = document.createElement("a");
+                a.href = encodeURI(item.name);
+
+                if(item.name.length > 100) {
+                    a.appendChild(document.createTextNode(item.name.substr(0, 99) + "…"));
+                } else {
+                    a.appendChild(document.createTextNode(item.name));
+                }
+                td.appendChild(a);
+                row.appendChild(td);
+
+                td = document.createElement("td");
+                td.className = "ModifiedOn";
+                td.appendChild(document.createTextNode(item.modifiedOn));
+                row.appendChild(td);
+
+
+                td = document.createElement("td");
+                td.className = "Size";
+                row.appendChild(td);
+
+                var size = item.size;
+                var sizeParts = new Array(Math.ceil(Math.log(item.size + 1) / Math.LN10 / 3));
+                for (var j = 0; j < sizeParts.length; j++) {
+                    sizeParts[j] = size % 1000;
+                    size = Math.floor(size / 1000);
+                }
+
+                var span = document.createElement("span");
+                span.className = prefixes[sizeParts.length - 1];
+                span.appendChild(document.createTextNode(sizeParts[sizeParts.length - 1].toString()));
+                td.insertBefore(span);
+
+                for (var j = sizeParts.length - 2; j >= 0; j--) {
+                    var span = document.createElement("span");
+                    span.className = prefixes[j];
+                    span.appendChild(document.createTextNode(("00" + sizeParts[j].toString()).slice(-3)));
+                    td.insertBefore(span);
+                }
+            }
+
+            document.body.appendChild(contentTable);
+        };
+    </script>
+    <style>
+        .b {
+            color: #555555;
+        }
+        .kb {
+            color: #6F6F6F;
+        }
+        .mb {
+            color: #9F9F9F;
+        }
+        .gb {
+            color: #CFCFCF;
+        }
+        .tb, .pb, .eb, .zb, .yb {
+            color: #FFFFFF;
+        }
+        tr:hover {
+            background-color: #0F0F0F;
+        }
+        .ModifiedOn, .Size {
+            text-align: right;
+            padding-left: 2em;
+            white-space: nowrap;
+        }
+        html {
+            background-color: #202020;
+        }
+        body {
+            font-family: 'Courier New';
+            font-size: small;
+            background-color: #202020;
+            color: #DCDCDC;
+        }
+        #contentTable {
+            padding: 0px;
+            margin: 0px;
+            border: none;
+            border-spacing: 0px;
+        }
+        a:link {
+            color: #D69D85;
+            text-decoration: none;
+        }
+        a:visited {
+            color: #87695d;
+            text-decoration: none;
+        }
+        a:hover {
+            color: #D69D85;
+            text-decoration: underline;
+        }
+        a:active {
+            color: #D69D85;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+</body>
+</html>
