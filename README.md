@@ -128,6 +128,11 @@ Trims the string and appends "`...`" to length specified if necessary (ellipsis 
 **Context**: Anywhere  
 Performs a lossy conversion from Unicode to Ascii, replacing multibyte characters by the specified character.  
 
+***Separator***  
+**Syntax** `Separator=,`  
+**Context**: EntryLoop  
+Appends the specified separator after each produced entry, except for the last. 
+ 
 ***StartAt***  
 **Syntax** `StartAt=40`  
 **Context**: All inside EntryLoop  
@@ -153,13 +158,13 @@ Default Template
     <meta charset="<!--[ReplyCharSet]-->">
     <title><!--[RequestUri]--> (AutoLS)</title><!--{JSVariable}-->
     <script type="text/javascript">
-      var dirListing = [<!--{EntryLoop}-->
+      var dirListing = [<!--{EntryLoop?Separator=,}-->
         {
           "isDirectory": <!--[EntryIsDirectory]-->,
           "modifiedOn": "<!--[EntryModifiedOn]-->",
           "size": <!--[EntrySize]-->,
           "name": "<!--[EntryName]-->"
-        },<!--{/EntryLoop}-->
+        }<!--{/EntryLoop}-->
       ];
     </script><!--{/JSVariable}--><!--{JSSource}-->
     <script type="text/javascript" src="<!--[JSSource]-->"></script><!--{/JSSource}--><!--{CSSSource}-->
