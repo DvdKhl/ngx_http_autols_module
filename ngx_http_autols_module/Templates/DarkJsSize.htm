@@ -6,7 +6,6 @@
     <script type="text/javascript">
 
         window.onload = function () {
-
             var prefixes = ["b", "kb", "mb", "gb", "tb", "pb", "eb", "zb", "yb"];
 
             var dirListing = [<!--{EntryLoop?Separator=,}-->
@@ -36,20 +35,6 @@
                 contentTable.appendChild(row);
 
                 var td = document.createElement("td");
-                td.className = "Name";
-
-                var a = document.createElement("a");
-                a.href = encodeURI(item.name);
-
-                if(item.name.length > 100) {
-                    a.appendChild(document.createTextNode(item.name.substr(0, 99) + "…"));
-                } else {
-                    a.appendChild(document.createTextNode(item.name));
-                }
-                td.appendChild(a);
-                row.appendChild(td);
-
-                td = document.createElement("td");
                 td.className = "ModifiedOn";
                 td.appendChild(document.createTextNode(item.modifiedOn));
                 row.appendChild(td);
@@ -59,24 +44,41 @@
                 td.className = "Size";
                 row.appendChild(td);
 
-                var size = item.size;
-                var sizeParts = new Array(Math.ceil(Math.log(item.size + 1) / Math.LN10 / 3));
-                for (var j = 0; j < sizeParts.length; j++) {
-                    sizeParts[j] = size % 1000;
-                    size = Math.floor(size / 1000);
-                }
+                if(!item.isDirectory) {
+                    var size = item.size;
+                    var sizeParts = new Array(Math.ceil(Math.log(item.size + 1) / Math.LN10 / 3));
+                    for (var j = 0; j < sizeParts.length; j++) {
+                        sizeParts[j] = size % 1000;
+                        size = Math.floor(size / 1000);
+                    }
 
-                var span = document.createElement("span");
-                span.className = prefixes[sizeParts.length - 1];
-                span.appendChild(document.createTextNode(sizeParts[sizeParts.length - 1].toString()));
-                td.insertBefore(span);
-
-                for (var j = sizeParts.length - 2; j >= 0; j--) {
                     var span = document.createElement("span");
-                    span.className = prefixes[j];
-                    span.appendChild(document.createTextNode(("00" + sizeParts[j].toString()).slice(-3)));
-                    td.insertBefore(span);
+                    span.className = prefixes[sizeParts.length - 1];
+                    span.appendChild(document.createTextNode(sizeParts[sizeParts.length - 1].toString()));
+                    td.appendChild(span);
+
+                    for (var j = sizeParts.length - 2; j >= 0; j--) {
+                        var span = document.createElement("span");
+                        span.className = prefixes[j];
+                        span.appendChild(document.createTextNode(("00" + sizeParts[j].toString()).slice(-3)));
+                        td.appendChild(span);
+                    }
                 }
+
+                td = document.createElement("td");
+                td.className = "Name";
+
+                var a = document.createElement("a");
+                a.href = encodeURI(item.name);
+
+                //if(item.name.length > 100) {
+                //    a.appendChild(document.createTextNode(item.name.substr(0, 99) + "…"));
+                //} else {
+                    a.appendChild(document.createTextNode(item.name));
+                //}
+                td.appendChild(a);
+                row.appendChild(td);
+
             }
 
             document.body.appendChild(contentTable);
@@ -97,17 +99,18 @@
             margin: 0px;
             border: none;
             border-spacing: 0px;
+            white-space: nowrap;
+            overflow: hidden;
         }
         tr:hover {
             background-color: #0F0F0F;
         }
-        td.Name {
-            border-bottom: 1px dotted #444;
-        }
         .ModifiedOn, .Size {
             text-align: right;
-            padding-left: 2em;
-            white-space: nowrap;
+            padding-right: 2em;
+        }
+        .Size {
+            min-width: 6em;
         }
 
         .b {

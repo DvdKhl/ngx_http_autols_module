@@ -46,6 +46,7 @@ void stringBuilderDisposeChainLinksCalloc(stringBuilder *strb) {
 		nextLink = link->next;
 		free(link);
 	} while((link = nextLink) != NULL);
+	free(strb->alloc->config);
 }
 
 

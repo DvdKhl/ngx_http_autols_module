@@ -56,7 +56,10 @@ static void appendConfig(stringBuilder *strb, alsConnectionConfig *conConf) {
 	char cwd[NGX_MAX_PATH];
 	int i;
 
-	if(!ngx_getcwd(cwd, NGX_MAX_PATH)) logHttpDebugMsg0(alsLog, "autols: Getting cwd failed");
+	if(!ngx_getcwd(cwd, NGX_MAX_PATH)) {
+		logHttpDebugMsg0(alsLog, "autols: Getting cwd failed");
+		return;
+	}
 	
 	logHttpDebugMsg0(alsLog, "autols: Printing Globals");
 	strbAppendCString(strb, "<pre>#Global" CRLF);
@@ -515,8 +518,9 @@ static int applyPatternSub(stringBuilder *strb, ngx_array_t *tokens, alsConnecti
 
 static int applyPattern(stringBuilder *strb, alsPattern *pattern, alsConnectionConfig *conConf, alsFileEntriesInfo *fileEntriesInfo) {
 	logHttpDebugMsg0(alsLog, "autols: Applying Pattern");
-	return applyPatternSub(strb, &pattern->tokens, conConf, fileEntriesInfo, NULL);
+	int rc = applyPatternSub(strb, &pattern->tokens, conConf, fileEntriesInfo, NULL);
 	logHttpDebugMsg0(alsLog, "autols: Pattern applied");
+	return rc;
 }
 
 static ngx_rc_t setRequestPath(alsConnectionConfig *conConf) {
@@ -714,14 +718,20 @@ static ngx_rc_t createReplyBody(alsConnectionConfig *conConf, alsFileEntriesInfo
 
 	if(!applyPattern(&strb, pattern, conConf, fileEntriesInfo)) return NGX_ERROR;
 
+	logHttpDebugMsg0(alsLog, "autols: 1");
 	*out = ngx_alloc_chain_link(conConf->request->connection->pool);
+	logHttpDebugMsg0(alsLog, "autols: 2");
 	(*out)->buf = ngx_create_temp_buf(conConf->request->connection->pool, strb.size);
+	logHttpDebugMsg0(alsLog, "autols: 3");
 
 	if(!strbToCString(&strb, (char*)(*out)->buf->last)) return 0;
+	logHttpDebugMsg5(alsLog, "autols: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d)", strb.size, strb.capacity, strb.startLink, strb.lastLink, strb.endLink);
 	strbDispose(&strb);
+	logHttpDebugMsg0(alsLog, "autols: 5");
 
 	(*out)->buf->last += strb.size;
 	(*out)->buf->last_in_chain = 1;
+	logHttpDebugMsg0(alsLog, "autols: 6");
 
 	if(conConf->request == conConf->request->main) {
 		logHttpDebugMsg0(alsLog, "autols: strb.lastLink->buf->last_buf = 1");
