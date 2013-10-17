@@ -1,5 +1,18 @@
 #include "stringBuilder.h"
 
+#if STRINGBUILDER_DEBUG
+void(*strbLog)(char *format, ...);
+
+#if NGX_HAVE_C99_VARIADIC_MACROS || _MSC_VER
+#define strbLog(format, ...) strbLog(format, __VA_ARGS__)
+#elif (NGX_HAVE_GCC_VARIADIC_MACROS)
+#define strbLog(format, args...) strbLog(format, args)
+#endif
+
+#else
+#define strbLog(params)
+#endif
+
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
@@ -10,6 +23,8 @@ int32_t stringBuilderAppendChainLinksCalloc(stringBuilder *strb, int32_t count, 
 	prevLink = link = firstLink = NULL;
 	for(i = 0; i < count; i++) {
 		void *block = calloc(size + sizeof(stringBuilderChainLink), sizeof(char));
+		strbLog("autols stringBuilderAppendChainLinksCalloc block=%L", block);
+
 		if(block == NULL) return 0;
 
 		link = (stringBuilderChainLink*)block;
@@ -43,14 +58,24 @@ void stringBuilderDisposeChainLinksCalloc(stringBuilder *strb) {
 	stringBuilderChainLink *nextLink, *link = strb->startLink;
 
 	do {
+		strbLog("strb: stringBuilderDisposeChainLinksCalloc block=%L", link);
 		nextLink = link->next;
+		strbLog("strb: 1");
 		free(link);
+		strbLog("strb: 2");
 	} while((link = nextLink) != NULL);
-	free(strb->alloc->config);
+	strbLog("strb: 3");
+
+	if(strb->alloc->config) {
+		strbLog("strb: stringBuilderDisposeChainLinksCalloc strb->alloc->config=%L", strb->alloc->config);
+		free(strb->alloc->config);
+	}
+	strbLog("strb: 4");
 }
 
 
 int32_t strbEnsureCapacity(stringBuilder *strb, int32_t capacity) {
+	strbLog("strb EnsureCapacity: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d)", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
 	int32_t neededCapacity = capacity - strb->capacity;
 	if(neededCapacity < 1) return 1;
 
@@ -97,6 +122,7 @@ int32_t strbDefaultInit(stringBuilder *strb, int32_t minCapacity, int32_t newBuf
 
 
 int32_t strbEnsureContinuousCapacity(stringBuilder *strb, int32_t capacity) {
+	strbLog("strb EnsureContinuousCapacity: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d)", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
 	if(capacity < 1 || strbCurFree(strb) >= capacity) return 1;
 
 	int32_t appendedCapacity = max(capacity, strb->alloc->newBufferSize);

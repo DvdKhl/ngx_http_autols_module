@@ -12,26 +12,41 @@
 #define USE_REGEX 0
 #endif
 
-
 #define STRING_PREALLOCATE  50
 #if STRING_PREALLOCATE < 1
 #error STRING_PREALLOCATE must at least be higher than 0
 #endif
 
+
+#define AUTOLS_DEBUG 1
+
+//####### alsDebugMsg #######
+#if AUTOLS_DEBUG && !_MSC_VER
+
+#if(NGX_HAVE_C99_VARIADIC_MACROS)
+#define alsDebugMsg(log, ...) ngx_log_debug(NGX_LOG_DEBUG_HTTP, log, 0, __VA_ARGS__)
+#elif(NGX_HAVE_GCC_VARIADIC_MACROS)
+#define alsDebugMsg(log, args...) ngx_log_debug(NGX_LOG_DEBUG_HTTP, log, 0, args)
+#else
+#error "No VARIADIC_MACROS"
+#endif
+
+#else
+
+#if(NGX_HAVE_C99_VARIADIC_MACROS) || _MSC_VER
+#define alsDebugMsg(log, ...)
+#elif(NGX_HAVE_GCC_VARIADIC_MACROS)
+#define alsDebugMsg(log, args...)
+#else
+#error "No VARIADIC_MACROS"
+#endif
+
+#endif
+//####### /alsDebugMsg #######
+
+
 #define CLOSE_DIRECTORY_OK 0
 #define CLOSE_DIRECTORY_ERROR 1
-
-
-#define logHttpDebugMsg0(log, fmt)                                                 ngx_log_debug0(NGX_LOG_DEBUG_HTTP, log, 0, fmt)
-#define logHttpDebugMsg1(log, fmt, arg1)                                           ngx_log_debug1(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1)
-#define logHttpDebugMsg2(log, fmt, arg1, arg2)                                     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2)
-#define logHttpDebugMsg3(log, fmt, arg1, arg2, arg3)                               ngx_log_debug3(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3)
-#define logHttpDebugMsg4(log, fmt, arg1, arg2, arg3, arg4)                         ngx_log_debug4(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4)
-#define logHttpDebugMsg5(log, fmt, arg1, arg2, arg3, arg4, arg5)                   ngx_log_debug5(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4, arg5)
-#define logHttpDebugMsg6(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6)             ngx_log_debug6(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6)
-#define logHttpDebugMsg7(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)       ngx_log_debug7(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
-#define logHttpDebugMsg8(log, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) ngx_log_debug8(NGX_LOG_DEBUG_HTTP, log, 0, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
-
 
 enum {
     CounterMainMergeCall, CounterSrvMergeCall, CounterLocMergeCall,

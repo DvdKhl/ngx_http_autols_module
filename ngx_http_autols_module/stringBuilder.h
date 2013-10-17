@@ -10,7 +10,13 @@
 #include <string.h>
 #include <stdio.h>
 
-
+#define STRINGBUILDER_DEBUG 1
+#if STRINGBUILDER_DEBUG
+extern void(*strbLog)(char *format, ...);
+#define strbSetLogHandler(handler) strbLog = handler
+#else
+#define strbSetLogHandler(handler)
+#endif
 
 typedef struct stringBuilderChainLink stringBuilderChainLink;
 struct stringBuilderChainLink {
