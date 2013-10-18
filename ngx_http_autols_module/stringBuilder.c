@@ -23,7 +23,7 @@ int32_t stringBuilderAppendChainLinksCalloc(stringBuilder *strb, int32_t count, 
 	prevLink = link = firstLink = NULL;
 	for(i = 0; i < count; i++) {
 		void *block = calloc(size + sizeof(stringBuilderChainLink), sizeof(char));
-		strbLog("autols stringBuilderAppendChainLinksCalloc block=%L", block);
+		strbLog("strb: stringBuilderAppendChainLinksCalloc block=%L", block);
 
 		if(block == NULL) return 0;
 
@@ -75,7 +75,7 @@ void stringBuilderDisposeChainLinksCalloc(stringBuilder *strb) {
 
 
 int32_t strbEnsureCapacity(stringBuilder *strb, int32_t capacity) {
-	strbLog("strb EnsureCapacity: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d)", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
+	strbLog("strb: EnsureCapacity: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d), capacity=%d", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink, capacity);
 	int32_t neededCapacity = capacity - strb->capacity;
 	if(neededCapacity < 1) return 1;
 
@@ -83,6 +83,7 @@ int32_t strbEnsureCapacity(stringBuilder *strb, int32_t capacity) {
 
 	if(!strb->alloc->append(strb, count, strb->alloc->newBufferSize)) return 0;
 
+	strbLog("strb: /EnsureCapacity: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d)", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
 	return 1;
 }
 
@@ -101,6 +102,7 @@ int32_t strbInit(stringBuilder *strb, int32_t minCapacity, stringBuilderAlloc *a
 }
 
 int32_t strbDefaultInit(stringBuilder *strb, int32_t minCapacity, int32_t newBufferSize) {
+	strbLog("strb: strbDefaultInit: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d), minCapacity=%d, newBufferSize=%d", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink, minCapacity, newBufferSize);
 	if(minCapacity < 0 || newBufferSize <= 0 || strb == NULL) return 0;
 	if(minCapacity == 0) minCapacity = 1;
 
@@ -116,24 +118,27 @@ int32_t strbDefaultInit(stringBuilder *strb, int32_t minCapacity, int32_t newBuf
 	strb->startLink = strb->lastLink = strb->endLink = NULL;
 
 	strbEnsureCapacity(strb, minCapacity);
+	strbLog("strb: /strbDefaultInit: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d)", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
 
 	return 1;
 }
 
 
 int32_t strbEnsureContinuousCapacity(stringBuilder *strb, int32_t capacity) {
-	strbLog("strb EnsureContinuousCapacity: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d)", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
+	strbLog("strb: EnsureContinuousCapacity: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d)", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
 	if(capacity < 1 || strbCurFree(strb) >= capacity) return 1;
 
 	int32_t appendedCapacity = max(capacity, strb->alloc->newBufferSize);
 	if(!strb->alloc->append(strb, 1, appendedCapacity)) return 0;
 
 	strbUseNextChain(strb);
+	strbLog("strb: /EnsureContinuousCapacity: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d)", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
 
 	return 1;
 }
 
 int32_t strbSetSize(stringBuilder *strb, int32_t size) {
+	strbLog("strb: strbSetSize: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d)", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
 	if(size < 0) return 0;
 
 	if(strb->size < size) {
@@ -172,10 +177,12 @@ int32_t strbSetSize(stringBuilder *strb, int32_t size) {
 		}
 		strb->size = size;
 	}
+	strbLog("strb: /strbSetSize: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d)", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
 	return 1;
 }
 
 int32_t strbAppendMemory(stringBuilder *strb, char *src, int32_t size) {
+	strbLog("strb: strbAppendMemory: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d), size=%d", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink, size);
 	if(size < 0) return 0;
 	if(!strbEnsureFreeCapacity(strb, size)) return 0;
 
@@ -189,6 +196,7 @@ int32_t strbAppendMemory(stringBuilder *strb, char *src, int32_t size) {
 
 		if(size != 0) strbUseNextChain(strb);
 	}
+	strbLog("strb: /strbAppendMemory: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d)", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
 	return 1;
 }
 
@@ -427,6 +435,7 @@ int32_t strbEscapeHtml(stringBuilder *strb, char *src, int32_t size) {
 
 //This does not use a pool, it uses malloc instead
 int32_t strbToCString(stringBuilder *strb, char *dst) {
+	strbLog("strb: strbToCString: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d)", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
 	stringBuilderChainLink *chain;
 	char *last;
 
@@ -443,6 +452,7 @@ int32_t strbToCString(stringBuilder *strb, char *dst) {
 	}
 	*last = '\0';
 
+	strbLog("strb: /strbToCString: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d)", strb->size, strb->capacity, strb->startLink, strb->lastLink, strb->endLink);
 	return 1;
 }
 

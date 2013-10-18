@@ -394,7 +394,7 @@ static int applyPatternProcessAttributes(stringBuilder *strbValue, ngx_array_t *
 	alsPatternAttribute *attribute = (alsPatternAttribute*)attributes->elts;
 	alsPatternAttribute *attributeLimit = attribute + attributes->nelts;
 	while(attribute != attributeLimit) {
-		//alsDebugMsg(alsLog, "autols: Processing attribute \"%V\"", &attribute->name);
+		alsDebugMsg(alsLog, "autols: Processing attribute \"%V\"", &attribute->name);
 
 		if(ngx_cstr_compare(&attribute->name, "StartAt")) {
 			int32_t toPad = ngx_atoi(attribute->value.data, attribute->value.len);
@@ -440,16 +440,21 @@ static int applyPatternProcessAttributes(stringBuilder *strbValue, ngx_array_t *
 
 	return 1;
 }
+
+
 static int applyPatternAppendToken(stringBuilder *strb, alsPatternToken *token, alsConnectionConfig *conConf, alsFileEntry *fileEntry) {
+	alsDebugMsg(alsLog, "autols: applyPatternAppendToken Name=%V", &token->name);
+
 	static stringBuilder strbValue;
-	if(!strbValue.isInitialized) if(!strbDefaultInit(&strbValue, 1024, 1024)) return 0;
-	//stringBuilder strbValue;
-	//if(!strbDefaultInit(&strbValue, 1024, 1024)) return 0;
+	//stringBuilder strbValue; strbValue.isInitialized = 0;
 
 	stringBuilder *curStrb;
 	if(token->attributes.nelts) {
+		if(!strbValue.isInitialized) if(!strbDefaultInit(&strbValue, 8065, 8065)) return 0;
+
 		strbSetSize(&strbValue, 0);
 		curStrb = &strbValue;
+
 	} else {
 		curStrb = strb;
 	}
@@ -483,9 +488,11 @@ static int applyPatternAppendToken(stringBuilder *strb, alsPatternToken *token, 
 	}
 
 	if(token->attributes.nelts) {
-		if(!applyPatternProcessAttributes(&strbValue, &token->attributes, conConf, strb->size)) return 0;
-		if(!strbAppendStrb(strb, &strbValue)) return 0;
+		if(!applyPatternProcessAttributes(curStrb, &token->attributes, conConf, strb->size)) return 0;
+		if(!strbAppendStrb(strb, curStrb)) return 0;
 	}
+
+	alsDebugMsg(alsLog, "autols: /applyPatternAppendToken");
 	return 1;
 }
 static int applyPatternSectionEnabled(alsConnectionConfig *conConf, ngx_str_t *sectionName) {
@@ -498,6 +505,7 @@ static int applyPatternSub(stringBuilder *strb, ngx_array_t *tokens, alsConnecti
 	alsPatternToken *token = (alsPatternToken*)tokens->elts;
 	alsPatternToken *tokenLast = token + tokens->nelts - 1;
 
+	alsDebugMsg(alsLog, "autols: applyPatternSub");
 	for(; token < tokenLast; token++) {
 		alsPatternToken *nextToken = token + 1;
 		if(!strbAppendMemory(strb, token->end, nextToken->start - token->end)) return 0;
@@ -513,6 +521,7 @@ static int applyPatternSub(stringBuilder *strb, ngx_array_t *tokens, alsConnecti
 				separator = NULL;
 			}
 
+			alsDebugMsg(alsLog, "autols: applyPatternSub EntryLoop");
 			alsFileEntry *fileEntry = (alsFileEntry*)fileEntriesInfo->fileEntries.elts;
 			alsFileEntry *fileEntryLimit = fileEntry + fileEntriesInfo->fileEntries.nelts;
 			while(fileEntry != fileEntryLimit) {
@@ -520,6 +529,7 @@ static int applyPatternSub(stringBuilder *strb, ngx_array_t *tokens, alsConnecti
 				if(!applyPatternSub(strb, &nextToken->children, conConf, fileEntriesInfo, fileEntry++)) return 0;
 				if(separator && fileEntry != fileEntryLimit) if(!strbAppendNgxString(strb, separator)) return 0;
 			}
+			alsDebugMsg(alsLog, "autols: /applyPatternSub EntryLoop");
 
 		} else if(nextToken->children.nelts && applyPatternSectionEnabled(conConf, &nextToken->name)) {
 			if(!applyPatternSub(strb, &nextToken->children, conConf, fileEntriesInfo, NULL)) return 0;
@@ -528,6 +538,7 @@ static int applyPatternSub(stringBuilder *strb, ngx_array_t *tokens, alsConnecti
 			if(!applyPatternAppendToken(strb, nextToken, conConf, fileEntry)) return 0;
 		}
 	}
+	alsDebugMsg(alsLog, "autols: /applyPatternSub");
 	return 1;
 }
 
