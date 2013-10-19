@@ -22,15 +22,16 @@ int32_t stringBuilderAppendChainLinksCalloc(stringBuilder *strb, int32_t count, 
 	int32_t i;
 	prevLink = link = firstLink = NULL;
 	for(i = 0; i < count; i++) {
-		void *block = calloc(size + sizeof(stringBuilderChainLink), sizeof(char));
-		strbLog("strb: stringBuilderAppendChainLinksCalloc block=%L", block);
-
+		void *block = malloc(size + sizeof(stringBuilderChainLink));
 		if(block == NULL) return 0;
+
+		strbLog("strb: stringBuilderAppendChainLinksCalloc block=%d", block);
 
 		link = (stringBuilderChainLink*)block;
 		link->start = link->last = (char*)block + sizeof(stringBuilderChainLink);
 		link->end = link->start + size;
 
+		link->next = link->prev = NULL;
 		if(prevLink != NULL) {
 			link->prev = prevLink;
 			prevLink->next = link;
@@ -58,7 +59,7 @@ void stringBuilderDisposeChainLinksCalloc(stringBuilder *strb) {
 	stringBuilderChainLink *nextLink, *link = strb->startLink;
 
 	do {
-		strbLog("strb: stringBuilderDisposeChainLinksCalloc block=%L", link);
+		strbLog("strb: stringBuilderDisposeChainLinksCalloc block=%d", link);
 		nextLink = link->next;
 		strbLog("strb: 1");
 		free(link);
@@ -67,7 +68,7 @@ void stringBuilderDisposeChainLinksCalloc(stringBuilder *strb) {
 	strbLog("strb: 3");
 
 	if(strb->alloc->config) {
-		strbLog("strb: stringBuilderDisposeChainLinksCalloc strb->alloc->config=%L", strb->alloc->config);
+		strbLog("strb: stringBuilderDisposeChainLinksCalloc strb->alloc->config=%d", strb->alloc->config);
 		free(strb->alloc->config);
 	}
 	strbLog("strb: 4");

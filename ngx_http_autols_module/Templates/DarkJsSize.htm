@@ -15,8 +15,8 @@
                     "size": <!--[EntrySize]-->,
                     "name": "<!--[EntryName]-->"
                 }<!--{/EntryLoop}-->
-            ];
-            
+                ];
+
             var contentTable = document.createElement("table");
             contentTable.id = "contentTable";
 
@@ -46,7 +46,7 @@
 
                 if(!item.isDirectory) {
                     var size = item.size;
-                    var sizeParts = new Array(Math.ceil(Math.log(item.size + 1) / Math.LN10 / 3));
+                    var sizeParts = new Array(Math.max(1, Math.ceil(Math.log(item.size + 1) / Math.LN10 / 3.0)));
                     for (var j = 0; j < sizeParts.length; j++) {
                         sizeParts[j] = size % 1000;
                         size = Math.floor(size / 1000);
@@ -54,13 +54,13 @@
 
                     var span = document.createElement("span");
                     span.className = prefixes[sizeParts.length - 1];
-                    span.appendChild(document.createTextNode(sizeParts[sizeParts.length - 1].toString()));
+                    span.appendChild(document.createTextNode(sizeParts[sizeParts.length - 1]));
                     td.appendChild(span);
 
                     for (var j = sizeParts.length - 2; j >= 0; j--) {
                         var span = document.createElement("span");
                         span.className = prefixes[j];
-                        span.appendChild(document.createTextNode(("00" + sizeParts[j].toString()).slice(-3)));
+                        span.appendChild(document.createTextNode(("00" + sizeParts[j]).slice(-3)));
                         td.appendChild(span);
                     }
                 }
@@ -74,7 +74,7 @@
                 //if(item.name.length > 100) {
                 //    a.appendChild(document.createTextNode(item.name.substr(0, 99) + "…"));
                 //} else {
-                    a.appendChild(document.createTextNode(item.name));
+                a.appendChild(document.createTextNode(item.name));
                 //}
                 td.appendChild(a);
                 row.appendChild(td);
@@ -88,12 +88,14 @@
         html {
             background-color: #202020;
         }
+
         body {
             font-family: 'Courier New';
             font-size: small;
             background-color: #202020;
             color: #DCDCDC;
         }
+
         #contentTable {
             padding: 0px;
             margin: 0px;
@@ -102,13 +104,16 @@
             white-space: nowrap;
             overflow: hidden;
         }
+
         tr:hover {
             background-color: #0F0F0F;
         }
+
         .ModifiedOn, .Size {
             text-align: right;
             padding-right: 2em;
         }
+
         .Size {
             min-width: 6em;
         }
@@ -116,15 +121,19 @@
         .b {
             color: #555555;
         }
+
         .kb {
             color: #6F6F6F;
         }
+
         .mb {
             color: #9F9F9F;
         }
+
         .gb {
             color: #CFCFCF;
         }
+
         .tb, .pb, .eb, .zb, .yb {
             color: #FFFFFF;
         }
@@ -133,14 +142,17 @@
             color: #D69D85;
             text-decoration: none;
         }
+
         a:visited {
             color: #87695d;
             text-decoration: none;
         }
+
         a:hover {
             color: #D69D85;
             text-decoration: underline;
         }
+
         a:active {
             color: #D69D85;
             text-decoration: none;

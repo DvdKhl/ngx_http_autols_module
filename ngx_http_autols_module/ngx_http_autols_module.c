@@ -541,7 +541,6 @@ static int applyPatternSub(stringBuilder *strb, ngx_array_t *tokens, alsConnecti
 	alsDebugMsg(alsLog, "autols: /applyPatternSub");
 	return 1;
 }
-
 static int applyPattern(stringBuilder *strb, alsPattern *pattern, alsConnectionConfig *conConf, alsFileEntriesInfo *fileEntriesInfo) {
 	alsDebugMsg(alsLog, "autols: Applying Pattern");
 	int rc = applyPatternSub(strb, &pattern->tokens, conConf, fileEntriesInfo, NULL);
@@ -747,15 +746,16 @@ static ngx_rc_t createReplyBody(alsConnectionConfig *conConf, alsFileEntriesInfo
 	alsDebugMsg(alsLog, "autols: 1");
 	*out = ngx_alloc_chain_link(conConf->request->connection->pool);
 	alsDebugMsg(alsLog, "autols: 2");
-	(*out)->buf = ngx_create_temp_buf(conConf->request->connection->pool, strb.size);
+	(*out)->buf = ngx_create_temp_buf(conConf->request->connection->pool, strb.size + 1);
+	(*out)->next = NULL;
 	alsDebugMsg(alsLog, "autols: 3");
 
-	if(!strbToCString(&strb, (char*)(*out)->buf->last)) return 0;
+	if(!strbToCString(&strb, (char*)(*out)->buf->start)) return 0;
 	alsDebugMsg(alsLog, "autols: strb(size=%d, capacity=%d, start=%d, last=%d, end=%d)", strb.size, strb.capacity, strb.startLink, strb.lastLink, strb.endLink);
 	strbDispose(&strb);
 	alsDebugMsg(alsLog, "autols: 5");
 
-	(*out)->buf->last += strb.size;
+	(*out)->buf->last = (*out)->buf->start + strb.size;
 	(*out)->buf->last_in_chain = 1;
 	alsDebugMsg(alsLog, "autols: 6");
 
@@ -771,8 +771,8 @@ static ngx_rc_t createReplyBody(alsConnectionConfig *conConf, alsFileEntriesInfo
 ngx_rc_t ngx_http_autols_handler(ngx_http_request_t *r) {
 	alsFileEntriesInfo fileEntriesInfo;
 	alsConnectionConfig  conConf;
-	ngx_dir_t         dir;
-	ngx_rc_t          rc;
+	ngx_dir_t dir;
+	ngx_rc_t rc;
 
 	counters[CounterHandlerInvoke]++;
 	if(processHandlerFirstInvokeOn == NULL) {
