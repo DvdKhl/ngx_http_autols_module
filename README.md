@@ -3,7 +3,7 @@ Nginx AutoLS Module
 ![Image](README-DEMO.png)
 
 ***
-***WARNING***:This project is still in the early stages and hasn't had much testing yet.
+***WARNING***: This project is still in the early stages and hasn't had much testing yet.
 ***
 
 What is AutoLS

@@ -8,27 +8,35 @@
         window.onload = function () {
             var prefixes = ["b", "kb", "mb", "gb", "tb", "pb", "eb", "zb", "yb"];
 
-            var dirListing = [<!--{EntryLoop?Separator=,}-->
-                {
-                    "isDirectory": <!--[EntryIsDirectory]-->,
-                    "modifiedOn": "<!--[EntryModifiedOn]-->",
-                    "size": <!--[EntrySize]-->,
-                    "name": "<!--[EntryName]-->"
-                }<!--{/EntryLoop}-->
-                ];
+            var dirListing = [<!--{EntryLoop?Separator=,}-->{ "isDirectory": <!--[EntryIsDirectory]-->, "modifiedOn": "<!--[EntryModifiedOn]-->", "size": <!--[EntrySize]-->, "name": "<!--[EntryName]-->" }<!--{/EntryLoop}-->];
 
-            var contentTable = document.createElement("table");
-            contentTable.id = "contentTable";
+            var curUri = location.protocol + "//" + location.host + "/";
+            var a = document.createElement("a");
+            a.appendChild(document.createTextNode(location.host + "/"));
+            a.href = curUri;
 
             var contentCaption = document.createElement("caption");
-            var contentCaptionTestNode = document.createTextNode("Index of <!--[RequestUri]-->");
+            contentCaption.appendChild(document.createTextNode("Index of "));
+            contentCaption.appendChild(a);
 
-            contentCaption.appendChild(contentCaptionTestNode);
+            var pathParts = location.pathname.split("/");
+            for (var i = 0; i < pathParts.length; i++) {
+                if(pathParts[i] == "") continue;
+                curUri += pathParts[i] + "/";
+
+                a = document.createElement("a");
+                a.appendChild(document.createTextNode(decodeURI(pathParts[i]) + "/"));
+                a.href = curUri;
+
+                contentCaption.appendChild(a);
+            }
             contentCaption.appendChild(document.createElement("hr"));
 
+            var contentTable = document.createElement("table");
             contentTable.appendChild(contentCaption);
+            contentTable.id = "ContentTable";
 
-            for (var i = 0; i < dirListing.length; i++) {
+            for (var i = 1; i < dirListing.length; i++) {
                 var item = dirListing[i];
 
                 var row = document.createElement("tr");
@@ -68,7 +76,7 @@
                 td = document.createElement("td");
                 td.className = "Name";
 
-                var a = document.createElement("a");
+                a = document.createElement("a");
                 a.href = encodeURI(item.name);
 
                 //if(item.name.length > 100) {
@@ -85,78 +93,29 @@
         };
     </script>
     <style>
-        html {
-            background-color: #202020;
-        }
+        html { background-color: #202020; }
+        body { font-family: 'Courier New'; font-size: small; background-color: #202020; color: #DCDCDC; }
 
-        body {
-            font-family: 'Courier New';
-            font-size: small;
-            background-color: #202020;
-            color: #DCDCDC;
-        }
+        caption { text-align: left; }
 
-        #contentTable {
-            padding: 0px;
-            margin: 0px;
-            border: none;
-            border-spacing: 0px;
-            white-space: nowrap;
-            overflow: hidden;
-        }
+        a:link { color: #D69D85; text-decoration: none; }
+        a:visited { color: #87695d; text-decoration: none; }
+        a:hover { color: #D69D85; text-decoration: underline; }
+        a:active { color: #D69D85; text-decoration: none; }
 
-        tr:hover {
-            background-color: #0F0F0F;
-        }
+        caption a:visited { color: #ae7c67; text-decoration: none; }
 
-        .ModifiedOn, .Size {
-            text-align: right;
-            padding-right: 2em;
-        }
+        #ContentTable { padding: 0px; margin: 0px; border: none; border-spacing: 0px; white-space: nowrap; overflow: hidden; }
 
-        .Size {
-            min-width: 6em;
-        }
+        .ModifiedOn, .Size { text-align: right; padding-right: 2em; }
+        .Size { min-width: 6em; }
 
-        .b {
-            color: #555555;
-        }
-
-        .kb {
-            color: #6F6F6F;
-        }
-
-        .mb {
-            color: #9F9F9F;
-        }
-
-        .gb {
-            color: #CFCFCF;
-        }
-
-        .tb, .pb, .eb, .zb, .yb {
-            color: #FFFFFF;
-        }
-
-        a:link {
-            color: #D69D85;
-            text-decoration: none;
-        }
-
-        a:visited {
-            color: #87695d;
-            text-decoration: none;
-        }
-
-        a:hover {
-            color: #D69D85;
-            text-decoration: underline;
-        }
-
-        a:active {
-            color: #D69D85;
-            text-decoration: none;
-        }
+        .b { color: #555555; }
+        .kb { color: #6F6F6F; }
+        .mb { color: #9F9F9F; }
+        .gb { color: #CFCFCF; }
+        .tb, .pb, .eb, .zb, .yb { color: #FFFFFF; }
+        .b, .kb, .mb, .gb, .tb, .pb, .eb, .zb, .yb { padding-left: 0.2em; }
     </style>
 </head>
 <body>
