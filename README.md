@@ -2,10 +2,6 @@ Nginx AutoLS Module
 ===================
 ![Image](README-DEMO.png)
 
-***
-***WARNING***: This project is still in the early stages and hasn't had much testing yet.
-***
-
 What is AutoLS
 --------------
 AutoLS aims to be a more customizable variant of the built-in [AutoIndex Module](http://wiki.codemongers.com/NginxHttpAutoindexModule),
@@ -202,7 +198,7 @@ Sections will only appear in the result if they are defined in `autols_sections`
 Installation/Building
 ---------------------
 * Clone this repository. Search for the config file in cloned repository and note path (without filename)
-* Get nginx sources from http://hg.nginx.org/nginx, any 1.4.* version should do (1.5 seemed to work as well)
+* Get nginx sources from http://hg.nginx.org/nginx, any 1.4.* or greater version should do
 * Extract and enter folder and run `./Configure --add-module=DirectoryPathToConfigFile [some more settings]`
 * After that was sucessful run `make install` (you probably need to prepend sudo for it to work)
  * For more information refer to [Building Nginx From Source](http://wiki.nginx.org/Install#Building_Nginx_From_Source)
